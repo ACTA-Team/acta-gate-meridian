@@ -24,6 +24,9 @@ import {
   type PaymentOutcome,
 } from "./types.js";
 
+/** `0x04 ‖ x ‖ y`: the passkey's public key at the start of a WebAuthn signer's `key_data`. */
+const P256_UNCOMPRESSED_LEN = 65;
+
 /** Stops listing proposals here: each one is a read. */
 const MAX_PROPOSALS = 50;
 
@@ -185,7 +188,8 @@ export class StellarChain implements GateChain {
     if (!passkey) {
       throw new ContractError("NoPasskey", "The account has no WebAuthn signer on its rule 0");
     }
-    return new Uint8Array(passkey.values[1] as Uint8Array);
+    // smart-account-kit stores `key_data` = the 65-byte uncompressed key, then the credential id.
+    return new Uint8Array(passkey.values[1] as Uint8Array).slice(0, P256_UNCOMPRESSED_LEN);
   }
 
   async issue(vault: string, vcId: string, vcData: string) {
