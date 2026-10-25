@@ -189,10 +189,10 @@ export function useDemo() {
         },
         {
           label: t.flows.pay.policy,
-          detail: "check(holder, issuer, type, { tier })",
+          detail: t.flows.pay.policyDetail,
           run: async () => {
             if (result?.status === "rejected") {
-              throw new Rejection(t.flows.pay.rejected, result.reason ?? "");
+              throw new Rejection(t.flows.pay.rejected, t.common.reason(result.reason));
             }
           },
         },
@@ -225,7 +225,7 @@ export function useDemo() {
     let result: VoteActionResult | null = null;
     const settle = (r: VoteActionResult) => {
       result = r;
-      if (r.status === "rejected") throw new Rejection(rejectedTitle, r.reason);
+      if (r.status === "rejected") throw new Rejection(rejectedTitle, t.common.reason(r.reason));
     };
     return runFlow(
       action,
@@ -319,7 +319,7 @@ export function useDemo() {
           },
           {
             label: t.flows.issue.register,
-            detail: `register · tier: ${tier}`,
+            detail: t.flows.issue.registerDetail,
             run: async () => (await api.register(address!)).txHash,
           },
         ],
@@ -328,7 +328,7 @@ export function useDemo() {
           return {
             tone: "success",
             title: t.flows.issue.done(tier),
-            detail: `vc-gate.is_valid → ${String(view?.gate.isValid ?? false)}`,
+            detail: t.flows.issue.doneDetail(view?.gate.isValid ?? false),
           };
         },
       ),
@@ -341,7 +341,7 @@ export function useDemo() {
         [
           {
             label: t.flows.issue.register,
-            detail: `register · tier: ${holder?.credential?.tier ?? ""}`,
+            detail: t.flows.issue.registerDetail,
             run: async () => (await api.register(address!)).txHash,
           },
         ],
@@ -350,7 +350,7 @@ export function useDemo() {
           return {
             tone: "success",
             title: t.flows.register.done,
-            detail: `vc-gate.is_valid → ${String(view?.gate.isValid ?? false)}`,
+            detail: t.flows.issue.doneDetail(view?.gate.isValid ?? false),
           };
         },
       ),
@@ -362,7 +362,7 @@ export function useDemo() {
         [
           {
             label: t.flows.revoke.revoke(issuerName),
-            detail: "revoke_by_issuer",
+            detail: t.flows.revoke.revokeDetail,
             run: async () => (await api.revoke(address!)).txHash,
           },
           {
@@ -385,7 +385,7 @@ export function useDemo() {
       holderCall(
         "propose",
         t.flows.propose.title,
-        "propose · check(tier)",
+        t.flows.propose.gateDetail,
         t.flows.propose.rejected,
         (auth) => api.propose(address!, title, auth),
         (r) => ({

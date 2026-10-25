@@ -133,7 +133,7 @@ export default function Home() {
 
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-6 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground sm:px-8">
-          <span>ACTA Gate · vc-vault · vc-gate · credential-policy · credential-vote</span>
+          <span>{t.meta.footer}</span>
           <span className="flex items-center gap-2">
             {t.meta.builtOn}
             <Image

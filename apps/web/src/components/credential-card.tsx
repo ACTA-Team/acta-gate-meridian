@@ -74,31 +74,26 @@ export function CredentialCard({ holder, issuerName }: { holder: HolderView; iss
           )}
         </h3>
         <p className="relative mt-1 font-mono text-[11px] text-paper-muted">
-          {issuerName} →{" "}
-          {holder.vault ? `vault ${shortAddress(holder.vault)}` : t.credential.noVault}
+          {issuerName} → {holder.vault ? shortAddress(holder.vault) : t.credential.noVault}
         </p>
 
         <dl className="relative mt-5 space-y-2 rounded-2xl bg-paper-inset p-4 font-mono text-[11px]">
-          <Row label="vault.verify_vc">
+          <Row label={t.credential.status}>
             <Status tone={vc?.status === "valid" ? "ok" : revoked ? "alert" : "idle"}>
-              {vc ? { valid: "Valid", revoked: "Revoked", invalid: "Invalid" }[vc.status] : "—"}
+              {vc ? t.credential.statuses[vc.status] : "—"}
             </Status>
           </Row>
-          <Row label="vc-gate.is_valid">
+          <Row label={t.credential.visible}>
             <Status tone={holder.gate.isValid ? "ok" : holder.gate.registered ? "alert" : "idle"}>
-              {holder.gate.registered ? String(holder.gate.isValid) : t.credential.unregistered}
+              {holder.gate.registered
+                ? holder.gate.isValid
+                  ? t.common.yes
+                  : t.common.no
+                : t.credential.notPublished}
             </Status>
           </Row>
-          <Row label="claims">
-            <Swap
-              value={
-                Object.keys(holder.gate.claims).length
-                  ? Object.entries(holder.gate.claims)
-                      .map(([k, v]) => `${k}: ${v}`)
-                      .join(", ")
-                  : "—"
-              }
-            />
+          <Row label={t.credential.level}>
+            <Swap value={holder.gate.claims.tier ?? vc?.tier ?? "—"} />
           </Row>
         </dl>
 

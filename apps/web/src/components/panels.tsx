@@ -123,9 +123,9 @@ export function HolderPanel({ demo }: { demo: DemoState }) {
             exit={{ opacity: 0, y: -12 }}
           >
             <div className="space-y-2 rounded-xl bg-surface-sunken p-4">
-              <Address label="Smart account" value={holder.address} />
+              <Address label={t.holder.account} value={holder.address} />
               {holder.did && <Did value={holder.did} />}
-              {holder.vault && <Address label="Vault" value={holder.vault} />}
+              {holder.vault && <Address label={t.holder.vault} value={holder.vault} />}
             </div>
             <CredentialCard
               holder={holder}
@@ -285,7 +285,7 @@ export function TreasuryPanel({ demo }: { demo: DemoState }) {
     >
       {config?.treasury.address && (
         <Address
-          label="Smart account"
+          label={t.treasury.account}
           value={config.treasury.address}
           className="rounded-xl bg-surface-sunken p-4"
         />
@@ -343,7 +343,7 @@ export function TreasuryPanel({ demo }: { demo: DemoState }) {
               {payment.amount} USDC → {shortAddress(payment.to)}
             </p>
             {payment.reason && (
-              <p className="mt-2 font-mono text-[11px] text-cherry">{payment.reason}</p>
+              <p className="mt-2 text-xs text-cherry">{t.common.reason(payment.reason)}</p>
             )}
           </motion.div>
         )}
@@ -389,7 +389,7 @@ function ProposalRow({ demo, proposal }: { demo: DemoState; proposal: ProposalVi
         />
       </div>
       {proposal.hasVoted ? (
-        <p className="mt-3 font-mono text-[11px] text-primary">has_voted → true</p>
+        <p className="mt-3 text-xs font-medium text-primary">✓ {t.vote.voted}</p>
       ) : (
         <div className="mt-3 flex gap-2">
           <Button size="sm" disabled={!holder || busy} onClick={() => demo.vote(proposal.id, true)}>
@@ -440,10 +440,12 @@ export function VotePanel({ demo }: { demo: DemoState }) {
           <div className="flex flex-col gap-4">
             <div className="space-y-2 rounded-xl bg-surface-sunken p-4">
               <Address label={t.vote.contract} value={vote.address} />
-              <div className="flex items-center justify-between font-mono text-[11px]">
-                <span className="text-muted-foreground">can_vote(Marta)</span>
-                <span className={holder?.canVote ? "text-primary" : "text-cherry"}>
-                  {holder ? String(holder.canVote) : "—"}
+              <div className="flex items-center justify-between text-xs">
+                <span className="eyebrow">{t.vote.canVote}</span>
+                <span
+                  className={cn("font-medium", holder?.canVote ? "text-primary" : "text-cherry")}
+                >
+                  {holder ? (holder.canVote ? t.common.yes : t.common.no) : "—"}
                 </span>
               </div>
             </div>
