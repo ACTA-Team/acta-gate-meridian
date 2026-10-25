@@ -113,9 +113,9 @@ describe("demo flow", () => {
     expect(res.status).toBe(400);
   });
 
-  it("asks for every secret up front, and takes the contract IDs from shared", () => {
-    expect(() => loadConfig({})).toThrow(/TREASURY_ADDRESS, SPONSOR_SECRET/);
-    expect(() => loadConfig({})).not.toThrow(/VC_GATE_ID/);
+  it("needs the sponsor up front, and takes the contract IDs from shared", () => {
+    expect(() => loadConfig({})).toThrow(/SPONSOR_SECRET/);
+    expect(() => loadConfig({})).not.toThrow(/VC_GATE_ID|ISSUER_SECRET/);
   });
 });
 

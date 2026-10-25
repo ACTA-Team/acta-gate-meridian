@@ -12,6 +12,7 @@ import {
 } from "@stellar/stellar-sdk";
 
 import type { Config } from "../config.js";
+import { HttpError } from "../errors.js";
 import { didFromId, multikeyP256, newDidId } from "../did.js";
 import { invokeAsHolder } from "./holder-call.js";
 import { payFromSmartAccount } from "./treasury.js";
@@ -98,8 +99,10 @@ function rethrow(err: unknown, names: Record<number, string>): never {
  * Calls the deployed contracts on testnet. Clients are built from each
  * contract's on-chain spec (`contract.Client.from`), so no bindings are needed.
  *
- * Not exercised yet: it needs the spikes PA (vault 0.5.0 factory) and P8
- * (treasury with `credential-policy`) from `docs/IMPLEMENTATION.md`.
+ * Reads are simulated with the sponsor as source. GrantFox's key and the
+ * treasury are only needed by the calls that use them: without them the
+ * holder's wallet, DID and vault still work, and those calls say what is
+ * missing.
  */
 export class StellarChain implements GateChain {
   readonly issuerAddress: string;
@@ -107,15 +110,15 @@ export class StellarChain implements GateChain {
   readonly voteAddress: string | null;
 
   private readonly sponsor: Keypair;
-  private readonly issuer: Keypair;
+  private readonly issuerKey: Keypair | null;
   private readonly clients = new Map<string, Promise<DynamicClient>>();
   private readonly rpc: rpc.Server;
 
   constructor(private readonly config: Config) {
     this.sponsor = Keypair.fromSecret(config.SPONSOR_SECRET!);
-    this.issuer = Keypair.fromSecret(config.ISSUER_SECRET!);
-    this.issuerAddress = this.issuer.publicKey();
-    this.treasuryAddress = config.TREASURY_ADDRESS!;
+    this.issuerKey = config.ISSUER_SECRET ? Keypair.fromSecret(config.ISSUER_SECRET) : null;
+    this.issuerAddress = this.issuerKey?.publicKey() ?? config.ISSUER_ADDRESS;
+    this.treasuryAddress = config.TREASURY_ADDRESS ?? "";
     this.voteAddress = config.CREDENTIAL_VOTE_ID ?? null;
     this.rpc = new rpc.Server(config.stellar.rpcUrl);
   }
@@ -167,7 +170,7 @@ export class StellarChain implements GateChain {
   }
 
   async vaultDid(vault: string) {
-    const v = await this.client(vault, this.issuer);
+    const v = await this.client(vault, this.sponsor);
     const { result } = await v.vault_did!();
     return typeof result === "string" && result.length > 0 ? result : null;
   }
@@ -186,7 +189,8 @@ export class StellarChain implements GateChain {
   }
 
   async issue(vault: string, vcId: string, vcData: string) {
-    const v = await this.client(vault, this.issuer);
+    const issuer = this.issuer();
+    const v = await this.client(vault, issuer);
     const tx = await v.issue!({
       vc_id: vcId,
       vc_data: vcData,
@@ -194,7 +198,7 @@ export class StellarChain implements GateChain {
       issuer_addr: this.issuerAddress,
       issuer_did: "",
     });
-    return { txHash: await this.send(tx, this.issuer) };
+    return { txHash: await this.send(tx, issuer) };
   }
 
   /**
@@ -203,7 +207,8 @@ export class StellarChain implements GateChain {
    * yet: `vc-gate` then answers `NotTheIssuer`. That case is retried.
    */
   async register(vault: string, vcId: string, claims: Record<string, string>) {
-    const gate = await this.client(this.config.VC_GATE_ID!, this.issuer);
+    const issuer = this.issuer();
+    const gate = await this.client(this.config.VC_GATE_ID!, issuer);
     for (let attempt = 1; ; attempt++) {
       try {
         const tx = await gate.register!({
@@ -213,7 +218,7 @@ export class StellarChain implements GateChain {
           credential_type: CREDENTIAL_TYPE,
           claims: new Map(Object.entries(claims)),
         });
-        return { txHash: await this.send(tx, this.issuer) };
+        return { txHash: await this.send(tx, issuer) };
       } catch (err) {
         const lagging = GATE_ERRORS[contractErrorCode(err) ?? -1] === "NotTheIssuer";
         if (lagging && attempt < REGISTER_ATTEMPTS) {
@@ -226,13 +231,14 @@ export class StellarChain implements GateChain {
   }
 
   async revokeByIssuer(vault: string, vcId: string, date: string) {
-    const v = await this.client(vault, this.issuer);
+    const issuer = this.issuer();
+    const v = await this.client(vault, issuer);
     const tx = await v.revoke_by_issuer!({ vc_id: vcId, date });
-    return { txHash: await this.send(tx, this.issuer) };
+    return { txHash: await this.send(tx, issuer) };
   }
 
   async verifyVc(vault: string, vcId: string): Promise<CredentialStatus> {
-    const v = await this.client(vault, this.issuer);
+    const v = await this.client(vault, this.sponsor);
     const { result } = await v.verify_vc!({ vc_id: vcId });
     const tag = (result as { tag?: string }).tag;
     if (tag === "Valid") return "valid";
@@ -241,7 +247,7 @@ export class StellarChain implements GateChain {
   }
 
   async gateRecord(holder: string): Promise<GateRecord | null> {
-    const gate = await this.client(this.config.VC_GATE_ID!, this.issuer);
+    const gate = await this.client(this.config.VC_GATE_ID!, this.sponsor);
     const { result } = await gate.get_record!(this.gateKey(holder));
     if (!result) return null;
     const r = result as {
@@ -258,7 +264,7 @@ export class StellarChain implements GateChain {
   }
 
   async gateIsValid(holder: string) {
-    const gate = await this.client(this.config.VC_GATE_ID!, this.issuer);
+    const gate = await this.client(this.config.VC_GATE_ID!, this.sponsor);
     const { result } = await gate.is_valid!(this.gateKey(holder));
     return result === true;
   }
@@ -275,8 +281,10 @@ export class StellarChain implements GateChain {
       server: this.rpc,
       networkPassphrase: stellar.networkPassphrase,
       feePayer: this.sponsor,
-      account: this.treasuryAddress,
-      signer: Keypair.fromSecret(this.config.TREASURY_SIGNER_SECRET!),
+      account: this.treasury(),
+      signer: Keypair.fromSecret(
+        this.setting("TREASURY_SIGNER_SECRET", "to sign the treasury's payments"),
+      ),
       ed25519Verifier: stellar.smartAccounts.ed25519Verifier,
       token: stellar.contracts.usdc,
       to,
@@ -289,14 +297,14 @@ export class StellarChain implements GateChain {
   }
 
   async canVote(who: string) {
-    const vote = await this.client(this.requireVote(), this.issuer);
+    const vote = await this.client(this.requireVote(), this.sponsor);
     const { result } = await vote.can_vote!({ who });
     return result === true;
   }
 
   /** The contract has no count: read ids from 0 until one is missing. */
   async proposals() {
-    const vote = await this.client(this.requireVote(), this.issuer);
+    const vote = await this.client(this.requireVote(), this.sponsor);
     const list: Proposal[] = [];
     for (let id = 0; id < MAX_PROPOSALS; id++) {
       const { result } = await vote.proposal!({ id });
@@ -307,7 +315,7 @@ export class StellarChain implements GateChain {
   }
 
   async hasVoted(proposal: number, voter: string) {
-    const vote = await this.client(this.requireVote(), this.issuer);
+    const vote = await this.client(this.requireVote(), this.sponsor);
     const { result } = await vote.has_voted!({ proposal, voter });
     return result === true;
   }
@@ -357,6 +365,34 @@ export class StellarChain implements GateChain {
     // So the next read (often on another node) already sees the new tally.
     await this.settle((await this.rpc.getLatestLedger()).sequence);
     return result;
+  }
+
+  /** GrantFox's key: `credential-vote` and the policy only trust this issuer. */
+  private issuer(): Keypair {
+    if (!this.issuerKey)
+      this.setting(
+        "ISSUER_SECRET",
+        `GrantFox's key (${this.issuerAddress}), to issue, register and revoke`,
+      );
+    return this.issuerKey!;
+  }
+
+  private treasury(): string {
+    return this.setting(
+      "TREASURY_ADDRESS",
+      "the treasury smart account, with the current credential-policy",
+    );
+  }
+
+  /** A setting only some calls need, or a 503 that names it. */
+  private setting(
+    name: "ISSUER_SECRET" | "TREASURY_ADDRESS" | "TREASURY_SIGNER_SECRET",
+    what: string,
+  ): string {
+    const value = this.config[name];
+    if (!value)
+      throw new HttpError(503, "MissingSetting", `${name} is not set in apps/api/.env: ${what}`);
+    return value;
   }
 
   private requireVote(): string {

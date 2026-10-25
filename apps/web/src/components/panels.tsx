@@ -283,7 +283,7 @@ export function TreasuryPanel({ demo }: { demo: DemoState }) {
       name={config?.treasury.name ?? t.treasury.nameFallback}
       description={t.treasury.description(requirement)}
     >
-      {config && (
+      {config?.treasury.address && (
         <Address
           label="Smart account"
           value={config.treasury.address}

@@ -19,6 +19,8 @@ const Env = z.object({
   CREDENTIAL_POLICY_ID: z.string().optional(),
   CREDENTIAL_VOTE_ID: z.string().optional(),
 
+  /** GrantFox, the issuer `credential-vote` and the policy were deployed to trust. */
+  ISSUER_ADDRESS: z.string().default("GC7INDGAMCG522TIOWRH7TPVENROPFROKOXWYAFEFQCAFZNA2U2EEFA6"),
   /** The treasury smart account (`C…`), with `credential-policy` on its Default rule. */
   TREASURY_ADDRESS: z.string().optional(),
   /** ACTA: sponsors the holder's vault (`deploy_sponsored`) and pays the holder's fees. */
@@ -29,20 +31,21 @@ const Env = z.object({
   TREASURY_SIGNER_SECRET: z.string().optional(),
 });
 
+/**
+ * What the backend cannot start without. GrantFox's key and the treasury are
+ * only needed by the calls that use them (`StellarChain` names them then).
+ */
 const REQUIRED = [
   "VAULT_FACTORY_ID",
   "VC_GATE_ID",
   "CREDENTIAL_POLICY_ID",
   "CREDENTIAL_VOTE_ID",
-  "TREASURY_ADDRESS",
   "SPONSOR_SECRET",
-  "ISSUER_SECRET",
-  "TREASURY_SIGNER_SECRET",
 ] as const;
 
 export type Config = ReturnType<typeof loadConfig>;
 
-/** Every setting the backend needs to run against the deployed contracts, checked up front. */
+/** The backend's settings, with the ones it cannot start without checked up front. */
 export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
   const parsed = Env.parse(source);
   const stellar = getNetworkConfig(parsed.STELLAR_NETWORK);
