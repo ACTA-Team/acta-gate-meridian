@@ -43,7 +43,7 @@ basta para que un contrato decida en quién confía.
 
 ## 2. Un solo workspace en `soroban-sdk` 26.1
 
-Los cinco contratos están en `contracts/`, en un solo workspace. Los de ACTA venían
+Los seis contratos están en `contracts/`, en un solo workspace. Los de ACTA venían
 de la 23.4 y se subieron a la 26.1, porque `stellar-accounts` 0.7.2 (las smart
 accounts de OpenZeppelin) exige `soroban-sdk ^26.1`.
 

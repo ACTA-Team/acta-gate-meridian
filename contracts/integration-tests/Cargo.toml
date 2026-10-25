@@ -1,6 +1,6 @@
 [package]
 name = "acta-gate-integration-tests"
-description = "The treasury end to end: an OpenZeppelin smart account with credential-policy, vc-gate and the vault"
+description = "The treasury and the vote end to end: an OpenZeppelin smart account with credential-policy, credential-vote, vc-gate and the vault"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,5 +16,6 @@ stellar-accounts = { workspace = true }
 # The contracts under test, linked as Rust crates. Fine here because this
 # crate never becomes a WASM.
 credential-policy = { path = "../credential-policy" }
+credential-vote = { path = "../credential-vote" }
 vc-gate = { path = "../vc-gate" }
 vc-vault-factory-contract = { path = "../vc-vault-factory" }

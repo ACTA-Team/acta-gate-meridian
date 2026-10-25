@@ -7,6 +7,7 @@ name = "acta-gate-integration-tests"
 version = "0.1.0"
 dependencies = [
  "credential-policy",
+ "credential-vote",
  "soroban-sdk",
  "stellar-accounts",
  "vc-gate",
@@ -364,6 +365,13 @@ version = "0.1.0"
 dependencies = [
  "soroban-sdk",
  "stellar-accounts",
+]
+
+[[package]]
+name = "credential-vote"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
 ]
 
 [[package]]
