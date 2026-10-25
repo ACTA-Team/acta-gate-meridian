@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Space_Mono } from "next/font/google";
 
+import { I18nProvider } from "@/i18n/provider";
+
 import "./globals.css";
 
 // Same faces as acta.build and the dApp, so every ACTA surface reads as one system.
@@ -18,7 +20,7 @@ const spaceMono = Space_Mono({
 
 export const metadata: Metadata = {
   title: "ACTA Gate",
-  description: "Que cualquier contrato de Soroban pueda exigir una credencial verificable válida.",
+  description: "Let any Soroban contract require a valid verifiable credential.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -37,7 +39,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         />
       </head>
       <body suppressHydrationWarning className="min-h-full bg-background font-sans text-foreground">
-        {children}
+        <I18nProvider>{children}</I18nProvider>
       </body>
     </html>
   );

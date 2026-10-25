@@ -7,13 +7,16 @@ import {
   FileCheck2,
   IdCard,
   Link2,
+  ListPlus,
   type LucideIcon,
   Send,
   ShieldX,
   Vault,
+  Vote,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
+import { useI18n } from "@/i18n/provider";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<ActivityKind, { icon: LucideIcon; alert?: boolean }> = {
@@ -24,6 +27,9 @@ const ICONS: Record<ActivityKind, { icon: LucideIcon; alert?: boolean }> = {
   credential_revoked: { icon: Ban, alert: true },
   payment_sent: { icon: Send },
   payment_rejected: { icon: ShieldX, alert: true },
+  proposal_created: { icon: ListPlus },
+  vote_cast: { icon: Vote },
+  vote_rejected: { icon: ShieldX, alert: true },
 };
 
 export function ActivityFeed({
@@ -31,12 +37,13 @@ export function ActivityFeed({
   explorerUrl,
 }: {
   events: ActivityEvent[];
-  explorerUrl: string | null;
+  explorerUrl: string;
 }) {
+  const { t, locale } = useI18n();
   if (events.length === 0) {
     return (
       <p className="rounded-2xl border border-dashed border-border-strong p-8 text-center text-sm text-muted-foreground">
-        Todavía no hay actividad. Empieza creando la wallet de Marta.
+        {t.activity.empty}
       </p>
     );
   }
@@ -46,6 +53,8 @@ export function ActivityFeed({
       <AnimatePresence initial={false}>
         {events.map((e) => {
           const { icon: Icon, alert } = ICONS[e.kind];
+          // Events from an older backend have no `params`: show its own text.
+          const text = e.params ? t.activity.events[e.kind](e) : e;
           return (
             <motion.li
               key={e.id}
@@ -72,12 +81,14 @@ export function ActivityFeed({
                 <Icon className="size-4" />
               </motion.span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">{e.title}</p>
-                <p className="truncate font-mono text-[11px] text-muted-foreground">{e.detail}</p>
+                <p className="text-sm font-medium">{text.title}</p>
+                <p className="truncate font-mono text-[11px] text-muted-foreground">
+                  {text.detail}
+                </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1 font-mono text-[10px] text-muted-foreground">
-                <time dateTime={e.at}>{new Date(e.at).toLocaleTimeString()}</time>
-                {e.txHash && explorerUrl ? (
+                <time dateTime={e.at}>{new Date(e.at).toLocaleTimeString(locale)}</time>
+                {e.txHash && (
                   <a
                     href={`${explorerUrl}/tx/${e.txHash}`}
                     target="_blank"
@@ -87,8 +98,6 @@ export function ActivityFeed({
                     {e.txHash.slice(0, 8)}
                     <ExternalLink className="size-3" />
                   </a>
-                ) : (
-                  <span className="uppercase tracking-[0.12em]">sim</span>
                 )}
               </div>
             </motion.li>

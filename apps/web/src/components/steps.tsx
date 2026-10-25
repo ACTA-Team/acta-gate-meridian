@@ -4,22 +4,18 @@ import type { ActivityEvent, HolderView } from "@acta-gate/shared";
 import { Check } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
+import { useI18n } from "@/i18n/provider";
 import { cn } from "@/lib/utils";
-
-/** The demo table from `docs/IDEA ES.md`. */
-const STEPS = [
-  "Marta crea su wallet con Face ID. ACTA le crea su vault",
-  "GrantFox le emite Contributor Gold y la registra en vc-gate",
-  "La tesorería le paga a Marta → pasa",
-  "La tesorería le paga a alguien sin credencial → la policy lo rechaza",
-  "GrantFox revoca en el vault → el siguiente pago a Marta se rechaza",
-];
 
 /**
  * Which steps are done for the current holder. The activity log is shared and
  * newest first: only what happened since this holder's vault was created counts.
  */
-function progress(holder: HolderView | null, activity: ActivityEvent[]): boolean[] {
+function progress(
+  holder: HolderView | null,
+  activity: ActivityEvent[],
+  withVote: boolean,
+): boolean[] {
   const me = holder?.address;
   const born = activity.findIndex((e) => e.kind === "vault_deployed" && e.subject === me);
   const session = born === -1 ? [] : activity.slice(0, born + 1);
@@ -27,8 +23,10 @@ function progress(holder: HolderView | null, activity: ActivityEvent[]): boolean
 
   const revoked = at((e) => e.kind === "credential_revoked" && e.subject === me);
   const rejectedHolder = at((e) => e.kind === "payment_rejected" && e.subject === me);
+  const voted = at((e) => e.kind === "vote_cast" && e.subject === me);
+  const voteRejected = at((e) => e.kind === "vote_rejected" && e.subject === me);
 
-  return [
+  const steps = [
     Boolean(holder?.vault),
     Boolean(holder?.credential),
     at((e) => e.kind === "payment_sent" && e.subject === me) !== -1,
@@ -36,16 +34,25 @@ function progress(holder: HolderView | null, activity: ActivityEvent[]): boolean
     // A smaller index is a later event: rejected after the revocation.
     revoked !== -1 && rejectedHolder !== -1 && rejectedHolder < revoked,
   ];
+  if (withVote) {
+    steps.push(voted !== -1 && revoked !== -1 && voteRejected !== -1 && voteRejected < revoked);
+  }
+  return steps;
 }
 
 export function Steps({
   holder,
   activity,
+  withVote,
 }: {
   holder: HolderView | null;
   activity: ActivityEvent[];
+  withVote: boolean;
 }) {
-  const done = progress(holder, activity);
+  const { t } = useI18n();
+  // The demo table from `docs/IDEA.md`, plus `credential-vote` when it is deployed.
+  const steps = withVote ? [...t.steps.list, t.steps.vote] : t.steps.list;
+  const done = progress(holder, activity, withVote);
   const current = done.indexOf(false);
   const completed = done.filter(Boolean).length;
 
@@ -53,19 +60,21 @@ export function Steps({
     <div>
       <div className="mb-3 flex items-center gap-4">
         <span className="font-mono text-[11px] text-muted-foreground">
-          {completed}/{STEPS.length}
+          {completed}/{steps.length}
         </span>
         <div className="relative h-1 flex-1 overflow-hidden rounded-full bg-border">
           <motion.div
             className="absolute inset-y-0 left-0 rounded-full bg-primary"
             initial={false}
-            animate={{ width: `${(completed / STEPS.length) * 100}%` }}
+            animate={{ width: `${(completed / steps.length) * 100}%` }}
             transition={{ type: "spring", stiffness: 90, damping: 18 }}
           />
         </div>
       </div>
-      <ol className="grid gap-2 sm:grid-cols-5">
-        {STEPS.map((step, i) => (
+      <ol
+        className={cn("grid gap-2", withVote ? "sm:grid-cols-3 lg:grid-cols-6" : "sm:grid-cols-5")}
+      >
+        {steps.map((step, i) => (
           <motion.li
             key={step}
             className={cn(

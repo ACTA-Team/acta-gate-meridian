@@ -4,6 +4,7 @@ import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useI18n } from "@/i18n/provider";
 import { cn } from "@/lib/utils";
 
 export const shortAddress = (a: string) => `${a.slice(0, 6)}…${a.slice(-6)}`;
@@ -18,10 +19,11 @@ export function Address({
   label?: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     await navigator.clipboard.writeText(value);
-    toast("Dirección copiada", { description: shortAddress(value) });
+    toast(t.common.copied, { description: shortAddress(value) });
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
   };

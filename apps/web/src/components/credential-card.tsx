@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 
 import { shortAddress } from "@/components/address";
 import { LogoIcon } from "@/components/logo";
+import { useI18n } from "@/i18n/provider";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
  * when it is revoked.
  */
 export function CredentialCard({ holder, issuerName }: { holder: HolderView; issuerName: string }) {
+  const { t } = useI18n();
   const vc = holder.credential;
   const revoked = vc?.status === "revoked";
   const valid = vc?.status === "valid" && holder.gate.isValid;
@@ -68,11 +70,12 @@ export function CredentialCard({ holder, issuerName }: { holder: HolderView; iss
               Contributor <span className="font-light">{vc.tier}</span>
             </>
           ) : (
-            <span className="font-light text-paper-muted">Esperando al emisor…</span>
+            <span className="font-light text-paper-muted">{t.credential.waiting}</span>
           )}
         </h3>
         <p className="relative mt-1 font-mono text-[11px] text-paper-muted">
-          {issuerName} → {holder.vault ? `vault ${shortAddress(holder.vault)}` : "sin vault"}
+          {issuerName} →{" "}
+          {holder.vault ? `vault ${shortAddress(holder.vault)}` : t.credential.noVault}
         </p>
 
         <dl className="relative mt-5 space-y-2 rounded-2xl bg-paper-inset p-4 font-mono text-[11px]">
@@ -83,7 +86,7 @@ export function CredentialCard({ holder, issuerName }: { holder: HolderView; iss
           </Row>
           <Row label="vc-gate.is_valid">
             <Status tone={holder.gate.isValid ? "ok" : holder.gate.registered ? "alert" : "idle"}>
-              {holder.gate.registered ? String(holder.gate.isValid) : "sin registro"}
+              {holder.gate.registered ? String(holder.gate.isValid) : t.credential.unregistered}
             </Status>
           </Row>
           <Row label="claims">
@@ -113,7 +116,7 @@ export function CredentialCard({ holder, issuerName }: { holder: HolderView; iss
                 animate={{ scale: 1, rotate: -12, opacity: 0.9 }}
                 transition={{ type: "spring", stiffness: 300, damping: 14, delay: 0.15 }}
               >
-                Revocada
+                {t.credential.revoked}
               </motion.span>
             </motion.div>
           )}

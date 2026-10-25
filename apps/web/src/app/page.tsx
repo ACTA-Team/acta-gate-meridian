@@ -7,10 +7,11 @@ import { Toaster } from "sonner";
 
 import { ActivityFeed } from "@/components/activity-feed";
 import { Header } from "@/components/header";
-import { HolderPanel, IssuerPanel, TreasuryPanel } from "@/components/panels";
+import { HolderPanel, IssuerPanel, TreasuryPanel, VotePanel } from "@/components/panels";
 import { Steps } from "@/components/steps";
 import { TxDialog } from "@/components/tx-dialog";
 import { useDemo } from "@/hooks/use-demo";
+import { useI18n } from "@/i18n/provider";
 
 /** Entrance delay for the CSS `.enter` animation. */
 const delay = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
@@ -40,10 +41,15 @@ function Headline({ lead, accent }: { lead: string; accent: string }) {
 export default function Home() {
   const demo = useDemo();
   const { config } = demo;
+  const { t } = useI18n();
+  const intro = t.meta.intro(config?.issuer.name ?? "GrantFox", {
+    credentialType: config?.credentialType ?? "ContributorBadge",
+    tier: config?.requiredTier ?? "Gold",
+  });
 
   return (
     <>
-      <Header mode={config?.mode ?? null} />
+      <Header />
 
       <main className="relative isolate overflow-hidden">
         <div
@@ -57,43 +63,35 @@ export default function Home() {
 
         <div className="mx-auto max-w-7xl px-5 pb-20 pt-28 sm:px-8 sm:pt-32">
           <section className="max-w-3xl">
-            <p className="eyebrow enter">HackMeridian 2026 · Track Scale</p>
-            <Headline lead="Que cualquier contrato pueda exigir una credencial" accent="válida." />
+            <p className="eyebrow enter">{t.meta.eyebrow}</p>
+            <Headline
+              key={t.meta.headlineLead}
+              lead={t.meta.headlineLead}
+              accent={t.meta.headlineAccent}
+            />
             <p
               className="enter mt-5 max-w-2xl text-[15px] leading-relaxed text-muted-foreground sm:text-lg"
               style={delay(700)}
             >
-              La tesorería de {config?.issuer.name ?? "GrantFox"} solo le paga a quien tiene una
-              credencial{" "}
+              {intro.before}{" "}
               <span className="font-mono text-foreground">
                 {config?.credentialType ?? "ContributorBadge"}
               </span>{" "}
-              {config?.requiredTier ?? "Gold"} vigente. Nadie mantiene una allowlist: la revocación
-              llega sola a un contrato ajeno.
+              {intro.after}
             </p>
           </section>
-
-          {config?.mode === "mock" && (
-            <p
-              className="enter mt-8 rounded-xl border border-border-strong bg-surface-sunken px-4 py-3 text-[13px] text-muted-foreground"
-              style={delay(350)}
-            >
-              <span className="font-mono text-foreground">Modo simulado.</span> El backend corre en
-              memoria las mismas reglas que vc-vault, vc-gate y credential-policy. Con{" "}
-              <span className="font-mono">GATE_MODE=testnet</span> llama a los contratos
-              desplegados.
-            </p>
-          )}
 
           {demo.offline && (
             <div className="enter mt-6 flex items-center gap-3 rounded-xl border border-cherry/40 bg-cherry/10 px-4 py-3 text-sm">
               <WifiOff className="size-4 shrink-0 text-cherry" />
-              <p>{demo.offline}</p>
+              <p>
+                {"url" in demo.offline ? t.common.offline(demo.offline.url) : demo.offline.message}
+              </p>
             </div>
           )}
 
           <section className="mt-10">
-            <Steps holder={demo.holder} activity={demo.activity} />
+            <Steps holder={demo.holder} activity={demo.activity} withVote={Boolean(config?.vote)} />
           </section>
 
           <section className="mt-6 grid gap-5 lg:grid-cols-3">
@@ -102,26 +100,26 @@ export default function Home() {
             <TreasuryPanel demo={demo} />
           </section>
 
+          <section className="mt-5">
+            <VotePanel demo={demo} />
+          </section>
+
           <section className="mt-14">
             <p className="eyebrow flex items-center gap-3">
               <span className="relative flex size-1.5" aria-hidden="true">
                 <span className="absolute inset-0 animate-ping-soft rounded-full bg-cherry/70" />
                 <span className="relative size-1.5 rounded-full bg-cherry" />
               </span>
-              Actividad on-chain
+              {t.meta.activity}
             </p>
             <div className="mt-4">
-              <ActivityFeed events={demo.activity} explorerUrl={config?.explorerUrl ?? null} />
+              <ActivityFeed events={demo.activity} explorerUrl={config?.explorerUrl ?? ""} />
             </div>
           </section>
         </div>
       </main>
 
-      <TxDialog
-        flow={demo.flow}
-        explorerUrl={config?.explorerUrl ?? null}
-        onClose={demo.closeFlow}
-      />
+      <TxDialog flow={demo.flow} explorerUrl={config?.explorerUrl ?? ""} onClose={demo.closeFlow} />
       <Toaster
         position="bottom-right"
         toastOptions={{
@@ -135,9 +133,9 @@ export default function Home() {
 
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-6 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground sm:px-8">
-          <span>ACTA Gate · vc-vault · vc-gate · credential-policy</span>
+          <span>ACTA Gate · vc-vault · vc-gate · credential-policy · credential-vote</span>
           <span className="flex items-center gap-2">
-            Built on
+            {t.meta.builtOn}
             <Image
               src="/stellar.png"
               alt="Stellar"

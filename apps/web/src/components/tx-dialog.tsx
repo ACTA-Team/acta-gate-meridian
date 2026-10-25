@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { Flow, OutcomeTone, Stage } from "@/hooks/use-demo";
+import { useI18n } from "@/i18n/provider";
 import { cn } from "@/lib/utils";
 
 const spring = { type: "spring", stiffness: 320, damping: 26 } as const;
@@ -149,9 +150,10 @@ export function TxDialog({
   onClose,
 }: {
   flow: Flow | null;
-  explorerUrl: string | null;
+  explorerUrl: string;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const running = flow !== null && flow.outcome === null;
 
   return (
@@ -186,16 +188,14 @@ export function TxDialog({
 
                 <div className="relative flex items-start justify-between gap-4">
                   <div>
-                    <p className="eyebrow">{explorerUrl ? "Stellar testnet" : "Simulado"}</p>
+                    <p className="eyebrow">Stellar testnet</p>
                     <Dialog.Title className="mt-2 text-2xl font-bold">{flow.title}</Dialog.Title>
-                    <Dialog.Description className="sr-only">
-                      Progreso de las transacciones de esta acción
-                    </Dialog.Description>
+                    <Dialog.Description className="sr-only">{t.common.progress}</Dialog.Description>
                   </div>
                   {!running && (
                     <Dialog.Close
                       className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-                      aria-label="Cerrar"
+                      aria-label={t.common.close}
                     >
                       <X className="size-4" />
                     </Dialog.Close>
@@ -234,7 +234,7 @@ export function TxDialog({
                         {stage.status === "active" && stage.startedAt && (
                           <Elapsed since={stage.startedAt} />
                         )}
-                        {stage.status === "done" && stage.txHash && explorerUrl && (
+                        {stage.status === "done" && stage.txHash && (
                           <motion.a
                             href={`${explorerUrl}/tx/${stage.txHash}`}
                             target="_blank"
@@ -262,7 +262,7 @@ export function TxDialog({
                     >
                       <Outcome outcome={flow.outcome} />
                       <Button className="mt-6 w-full" size="lg" onClick={onClose}>
-                        Listo
+                        {t.common.done}
                       </Button>
                     </motion.div>
                   )}

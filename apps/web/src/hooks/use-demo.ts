@@ -1,17 +1,26 @@
 "use client";
 
-import type { ActivityEvent, DemoConfig, HolderView, PaymentResult, Tier } from "@acta-gate/shared";
+import type {
+  ActivityEvent,
+  DemoConfig,
+  HolderView,
+  PaymentResult,
+  ProposalView,
+  Tier,
+  VoteActionResult,
+} from "@acta-gate/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { shortAddress } from "@/components/address";
-import { api } from "@/lib/api";
-import { createHolderWallet, randomContractAddress } from "@/lib/wallet";
+import { useI18n } from "@/i18n/provider";
+import { api, ApiRequestError } from "@/lib/api";
+import { createHolderWallet, randomContractAddress, signHolderAuth } from "@/lib/wallet";
 
 const HOLDER_KEY = "acta-gate:holder";
 const MIN_STAGE_MS = 700;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export type Action = "wallet" | "issue" | "register" | "revoke" | "pay-holder" | "pay-stranger";
+export type Action =
+  "wallet" | "issue" | "register" | "revoke" | "pay-holder" | "pay-stranger" | "propose" | "vote";
 
 export type StageStatus = "pending" | "active" | "done" | "error";
 
@@ -58,17 +67,23 @@ export function useDemo() {
   const [holder, setHolder] = useState<HolderView | null>(null);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [payment, setPayment] = useState<PaymentResult | null>(null);
+  const [proposals, setProposals] = useState<ProposalView[]>([]);
   const [flow, setFlow] = useState<Flow | null>(null);
-  const [offline, setOffline] = useState<string | null>(null);
+  /** `url`: the backend is unreachable. `message`: it answered with an error. */
+  const [offline, setOffline] = useState<{ url: string } | { message: string } | null>(null);
+  const { t } = useI18n();
   const running = useRef(false);
 
   const refresh = useCallback(async (address: string | null) => {
-    const [events, view] = await Promise.all([
+    const [events, view, list] = await Promise.all([
       api.activity(),
       address ? api.holder(address) : Promise.resolve(null),
+      // 503 while credential-vote is not deployed: the vote panel stays off.
+      api.proposals(address).catch(() => []),
     ]);
     setActivity(events);
     setHolder(view);
+    setProposals(list);
     return view;
   }, []);
 
@@ -83,7 +98,13 @@ export function useDemo() {
         if (stored && !view?.vault) storeHolder(null);
         await refresh(view?.vault ? stored : null);
       })
-      .catch((e: Error) => setOffline(e.message));
+      .catch((e: Error) =>
+        setOffline(
+          e instanceof ApiRequestError && e.code === "Offline"
+            ? { url: e.message }
+            : { message: e.message },
+        ),
+      );
   }, [refresh]);
 
   const patchStage = (index: number, patch: Partial<Stage>) =>
@@ -122,7 +143,7 @@ export function useDemo() {
         for (const [i, stage] of stages.entries()) {
           current = i;
           patchStage(i, { status: "active", startedAt: Date.now() });
-          // A floor so instant (mock) stages still read as steps; testnet ones take longer anyway.
+          // A floor so a stage that answers at once still reads as a step.
           const [txHash] = await Promise.all([stage.run(), sleep(MIN_STAGE_MS)]);
           patchStage(i, { status: "done", txHash: txHash ?? null });
         }
@@ -130,39 +151,35 @@ export function useDemo() {
         setFlow((f) => (f ? { ...f, outcome } : f));
       } catch (e) {
         patchStage(current, { status: "error" });
-        if (e instanceof PolicyRejection) {
-          const outcome = {
-            tone: "rejected" as const,
-            title: "Pago rechazado por la policy",
-            detail: e.message,
-          };
+        if (e instanceof Rejection) {
+          const outcome = { tone: "rejected" as const, title: e.title, detail: e.message };
           setFlow((f) => (f ? { ...f, outcome } : f));
           return;
         }
         const message = e instanceof Error ? e.message : String(e);
         setFlow((f) =>
-          f ? { ...f, outcome: { tone: "error", title: "Algo falló", detail: message } } : f,
+          f ? { ...f, outcome: { tone: "error", title: t.flows.failed, detail: message } } : f,
         );
       } finally {
         running.current = false;
       }
     },
-    [],
+    [t],
   );
 
   const address = holder?.address ?? null;
-  const testnet = config?.mode === "testnet";
+  const issuerName = config?.issuer.name ?? t.holder.issuerFallback;
 
   const pay = (action: "pay-holder" | "pay-stranger", amount: string) => {
     let to = "";
     let result: PaymentResult | null = null;
     return runFlow(
       action,
-      `Pago de ${amount} USDC`,
+      t.flows.pay.title(amount),
       [
         {
-          label: "La tesorería firma el pago",
-          detail: "Firmante Ed25519 · regla Default",
+          label: t.flows.pay.sign,
+          detail: t.flows.pay.signDetail,
           run: async () => {
             to = action === "pay-holder" ? address! : await randomContractAddress();
             result = await api.pay(to, amount);
@@ -171,10 +188,12 @@ export function useDemo() {
           },
         },
         {
-          label: "credential-policy consulta vc-gate",
-          detail: "is_valid · has_claim(tier)",
+          label: t.flows.pay.policy,
+          detail: "check(holder, issuer, type, { tier })",
           run: async () => {
-            if (result?.status === "rejected") throw new PolicyRejection(result.reason ?? "");
+            if (result?.status === "rejected") {
+              throw new Rejection(t.flows.pay.rejected, result.reason ?? "");
+            }
           },
         },
       ],
@@ -182,15 +201,63 @@ export function useDemo() {
         await refresh(address);
         return {
           tone: "success",
-          title: "Pago aprobado",
-          detail: `${amount} USDC llegaron a ${shortAddress(to)}`,
+          title: t.flows.pay.done,
+          detail: t.flows.pay.doneDetail(amount, to),
         };
+      },
+    ).then(() => refresh(address));
+  };
+
+  /**
+   * `propose` and `vote` need Marta's signature. The first call runs the
+   * contract in simulation: a rejection from the gate lands here, before she
+   * signs. In testnet it answers `unsigned` with her auth entry; she signs it
+   * with the passkey and the second call submits it.
+   */
+  const holderCall = (
+    action: "propose" | "vote",
+    title: string,
+    gateDetail: string,
+    rejectedTitle: string,
+    call: (auth?: string) => Promise<VoteActionResult>,
+    success: (result: Extract<VoteActionResult, { status: "accepted" }>) => Flow["outcome"],
+  ) => {
+    let result: VoteActionResult | null = null;
+    const settle = (r: VoteActionResult) => {
+      result = r;
+      if (r.status === "rejected") throw new Rejection(rejectedTitle, r.reason);
+    };
+    return runFlow(
+      action,
+      title,
+      [
+        {
+          label: t.flows.holderCall.gate,
+          detail: gateDetail,
+          run: async () => settle(await call()),
+        },
+        {
+          label: t.flows.holderCall.sign,
+          detail: t.flows.holderCall.signDetail,
+          run: async () => {
+            const pending = result!;
+            if (pending.status !== "unsigned")
+              return pending.status === "accepted" ? pending.txHash : null;
+            settle(await call(await signHolderAuth(address!, pending.authEntry, t.wallet)));
+            return result!.status === "accepted" ? result!.txHash : null;
+          },
+        },
+      ],
+      async () => {
+        await refresh(address);
+        return success(result as unknown as Extract<VoteActionResult, { status: "accepted" }>);
       },
     ).then(() => refresh(address));
   };
 
   return {
     config,
+    proposals,
     holder,
     activity,
     payment,
@@ -203,25 +270,25 @@ export function useDemo() {
       let wallet = "";
       return runFlow(
         "wallet",
-        "Wallet de Marta",
+        t.flows.wallet.title,
         [
           {
-            label: "Passkey y smart account",
-            detail: testnet ? "Tu navegador te pide Face ID o Touch ID" : "Simulado",
+            label: t.flows.wallet.passkey,
+            detail: t.flows.wallet.passkeyDetail,
             run: async () => {
-              const created = await createHolderWallet(config!.mode, "Marta");
+              const created = await createHolderWallet("Marta", t.wallet);
               wallet = created.address;
               return created.txHash;
             },
           },
           {
-            label: "ACTA crea tu cédula",
-            detail: "register_sponsored · did:stellar con tu passkey como llave",
+            label: t.flows.wallet.did,
+            detail: t.flows.wallet.didDetail,
             run: async () => (await api.registerDid(wallet)).txHash,
           },
           {
-            label: "ACTA crea tu vault",
-            detail: "deploy_sponsored · Marta no firma ni paga",
+            label: t.flows.wallet.vault,
+            detail: t.flows.wallet.vaultDetail,
             run: async () => {
               const { txHash } = await api.createHolder(wallet);
               storeHolder(wallet);
@@ -233,8 +300,8 @@ export function useDemo() {
           await refresh(wallet);
           return {
             tone: "success",
-            title: "Wallet lista",
-            detail: "Tu smart account, tu did:stellar y tu vault ya están en Stellar.",
+            title: t.flows.wallet.done,
+            detail: t.flows.wallet.doneDetail,
           };
         },
       );
@@ -243,15 +310,15 @@ export function useDemo() {
     issue: (tier: Tier) =>
       runFlow(
         "issue",
-        `Credencial Contributor ${tier}`,
+        t.flows.issue.title(tier),
         [
           {
-            label: `${config?.issuer.name ?? "El emisor"} emite en el vault`,
-            detail: "vault.issue · guarda quién la emitió",
+            label: t.flows.issue.issue(issuerName),
+            detail: t.flows.issue.issueDetail,
             run: async () => (await api.issue(address!, tier)).txHash,
           },
           {
-            label: "Registro en vc-gate",
+            label: t.flows.issue.register,
             detail: `register · tier: ${tier}`,
             run: async () => (await api.register(address!)).txHash,
           },
@@ -260,7 +327,7 @@ export function useDemo() {
           const view = await refresh(address);
           return {
             tone: "success",
-            title: `Contributor ${tier} emitida`,
+            title: t.flows.issue.done(tier),
             detail: `vc-gate.is_valid → ${String(view?.gate.isValid ?? false)}`,
           };
         },
@@ -270,10 +337,10 @@ export function useDemo() {
     register: () =>
       runFlow(
         "register",
-        "Registrar en vc-gate",
+        t.flows.register.title,
         [
           {
-            label: "Registro en vc-gate",
+            label: t.flows.issue.register,
             detail: `register · tier: ${holder?.credential?.tier ?? ""}`,
             run: async () => (await api.register(address!)).txHash,
           },
@@ -282,7 +349,7 @@ export function useDemo() {
           const view = await refresh(address);
           return {
             tone: "success",
-            title: "Registrada en vc-gate",
+            title: t.flows.register.done,
             detail: `vc-gate.is_valid → ${String(view?.gate.isValid ?? false)}`,
           };
         },
@@ -291,26 +358,54 @@ export function useDemo() {
     revoke: () =>
       runFlow(
         "revoke",
-        "Revocar la credencial",
+        t.flows.revoke.title,
         [
           {
-            label: `${config?.issuer.name ?? "El emisor"} revoca en el vault`,
+            label: t.flows.revoke.revoke(issuerName),
             detail: "revoke_by_issuer",
             run: async () => (await api.revoke(address!)).txHash,
           },
           {
-            label: "vc-gate lo ve en la siguiente lectura",
-            detail: "Nadie toca el gate ni una allowlist",
+            label: t.flows.revoke.gate,
+            detail: t.flows.revoke.gateDetail,
             run: async () => {
               const view = await refresh(address);
-              if (view?.gate.isValid) throw new Error("vc-gate todavía la ve válida");
+              if (view?.gate.isValid) throw new Error(t.flows.revoke.stillValid);
             },
           },
         ],
         async () => ({
           tone: "rejected",
-          title: "Credencial revocada",
-          detail: "vc-gate.is_valid → false. El próximo pago a Marta va a rebotar.",
+          title: t.flows.revoke.done,
+          detail: t.flows.revoke.doneDetail,
+        }),
+      ),
+
+    propose: (title: string) =>
+      holderCall(
+        "propose",
+        t.flows.propose.title,
+        "propose · check(tier)",
+        t.flows.propose.rejected,
+        (auth) => api.propose(address!, title, auth),
+        (r) => ({
+          tone: "success",
+          title: t.flows.propose.done(r.proposal.id),
+          detail: r.proposal.title,
+        }),
+      ),
+
+    vote: (proposal: number, inFavor: boolean) =>
+      holderCall(
+        "vote",
+        t.flows.vote.title(inFavor, proposal),
+        t.flows.vote.gateDetail,
+        t.flows.vote.rejected,
+        (auth) => api.vote(address!, proposal, inFavor, auth),
+        (r) => ({
+          tone: "success",
+          title: t.flows.vote.done,
+          detail: t.flows.vote.doneDetail(r.proposal.id, r.proposal.inFavor, r.proposal.against),
         }),
       ),
 
@@ -325,7 +420,14 @@ export function useDemo() {
   };
 }
 
-/** The policy said no: shown as a rejection, not as a failure. */
-class PolicyRejection extends Error {}
+/** A gate said no (the treasury's policy, or the vote): a rejection, not a failure. */
+class Rejection extends Error {
+  constructor(
+    readonly title: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 export type DemoState = ReturnType<typeof useDemo>;

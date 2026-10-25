@@ -5,7 +5,9 @@ import type {
   DemoConfig,
   HolderView,
   PaymentResult,
+  ProposalView,
   Tier,
+  VoteActionResult,
 } from "@acta-gate/shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -29,7 +31,8 @@ async function request<T>(path: string, init?: { method?: string; body?: unknown
       cache: "no-store",
     });
   } catch {
-    throw new ApiRequestError("Offline", `No se pudo conectar con el backend en ${BASE_URL}`);
+    // The code, not a sentence: the page words it in the visitor's language.
+    throw new ApiRequestError("Offline", BASE_URL);
   }
   const data = (await res.json().catch(() => null)) as T | ApiError | null;
   if (!res.ok) {
@@ -55,4 +58,14 @@ export const api = {
     request<ActionResult>("/credentials/revoke", { method: "POST", body: { address } }),
   pay: (to: string, amount: string) =>
     request<PaymentResult>("/payments", { method: "POST", body: { to, amount } }),
+  proposals: (voter: string | null) =>
+    request<ProposalView[]>(voter ? `/proposals?voter=${voter}` : "/proposals"),
+  /** `auth`: the auth entry from a previous `unsigned` answer, signed with the passkey. */
+  propose: (proposer: string, title: string, auth?: string) =>
+    request<VoteActionResult>("/proposals", { method: "POST", body: { proposer, title, auth } }),
+  vote: (voter: string, proposal: number, inFavor: boolean, auth?: string) =>
+    request<VoteActionResult>("/votes", {
+      method: "POST",
+      body: { voter, proposal, inFavor, auth },
+    }),
 };
