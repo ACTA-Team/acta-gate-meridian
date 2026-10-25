@@ -249,6 +249,59 @@ de OpenZeppelin lo hacen concreto:
 
 Notas de implementación y evidencia: [`IMPLEMENTATION ES.md`](IMPLEMENTATION%20ES.md).
 
+## Contrato: `credential-vote`
+
+El segundo consumidor de `vc-gate`, para probar la frase del título: no es una smart
+account ni un pago, es un contrato común que pregunta antes de dejar actuar. Una
+votación de los contribuidores de GrantFox: **solo propone y vota quien tiene una
+credencial válida.** La misma credencial de Marta abre un pago y un voto; GrantFox la
+revoca una vez en su vault, y se cierran los dos.
+
+**Sin admin ni upgrade.** El requisito queda fijo en el constructor, con la misma forma
+que el de `credential-policy`:
+
+```rust
+__constructor(requirement: Requirement)   // gate, issuer, credential_type, claims
+```
+
+Dos claims con la misma clave se contradicen: el despliegue falla con
+`MalformedRequirement`, así que un requisito mal armado nunca llega a votar.
+
+### ABI
+
+| Función | Auth | Para qué |
+|---|---|---|
+| `propose(proposer, title) -> u32` | `proposer` | Abre una propuesta. El proponente tiene que estar acreditado |
+| `vote(voter, proposal, in_favor)` | `voter` | Un voto por dirección y propuesta. Consulta `vc-gate` en ese momento |
+| `proposal(id) -> Option<Proposal>` | — | Título, proponente, votos a favor y en contra, `created_at` |
+| `has_voted(proposal, voter) -> bool` | — | |
+| `can_vote(who) -> bool` | — | Lo que el gate responde hoy sobre `who`, bajo este requisito |
+
+Cada verificación es **una sola llamada** a `vc-gate.check(holder, issuer, type,
+claims)`, sin importar cuántos claims exija el requisito, igual que en
+`credential-policy`.
+
+**La credencial se verifica al votar, no al emitirla.** Una revocación impide votos y
+propuestas nuevos; los votos ya emitidos quedan. Es la misma regla que en la tesorería:
+el gate no cachea nada, y la revocación llega sola.
+
+A diferencia de la tesorería, acá **actúa Marta**: `vote` exige su firma. Con su smart
+account con passkey, es un Face ID.
+
+### Errores
+
+| Código | Nombre | Cuándo |
+|---:|---|---|
+| 1 | `NotCredentialed` | `vc-gate` no responde por esa dirección con los claims exigidos |
+| 2 | `ProposalNotFound` | |
+| 3 | `AlreadyVoted` | Segunda vez en la misma propuesta |
+| 4 | `InputTooLong` | Título de más de 128 bytes |
+| 5 | `MalformedRequirement` | En el constructor: dos claims con la misma clave |
+
+### Eventos
+
+`Proposed { id, proposer, title }` · `Voted { id, voter, in_favor }`
+
 ---
 
 ## Modelo de seguridad
@@ -290,7 +343,7 @@ Medido con parámetros de mainnet (agosto de 2026, XLM = $0,172).
 
 ```bash
 pnpm install
-pnpm turbo run test --filter=@acta-gate/contracts   # los cinco contratos
+pnpm turbo run test --filter=@acta-gate/contracts   # los seis contratos
 pnpm dev                                           # web :3000 y api :4000
 ```
 

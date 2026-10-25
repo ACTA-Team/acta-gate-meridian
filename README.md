@@ -25,6 +25,7 @@ contracts/             Workspace de Cargo (soroban-sdk 26.1, stellar-accounts 0.
   did-stellar-registry/  ACTA
   vc-gate/             Índice: de una dirección a su credencial y sus claims
   credential-policy/   Policy de la tesorería
+  credential-vote/     Votación de contribuidores: el segundo contrato que consulta vc-gate
 circuits/              Reservado para la fase ZK (Circom + Groth16 sobre BN254)
 docs/
 ```

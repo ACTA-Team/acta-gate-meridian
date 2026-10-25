@@ -8,6 +8,7 @@ members = [
     # ACTA Gate
     "vc-gate",
     "credential-policy",
+    "credential-vote",
     # Test-only: the treasury through a real smart account
     "integration-tests",
 ]

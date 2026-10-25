@@ -17,10 +17,14 @@
 //! The account contract below is built from the crate's building blocks. The
 //! one on testnet is `smart-account-kit`'s WASM, compiled from a slightly newer
 //! OpenZeppelin commit with the same `Policy` trait (`IMPLEMENTATION ES.md` §4).
+//!
+//! The last section adds the second gate, `credential-vote`, next to the
+//! treasury: one credential opens both, one revocation closes both.
 
 use credential_policy::{
     Claim, CredentialPolicy, CredentialPolicyClient, Error as PolicyError, Requirement,
 };
+use credential_vote::{CredentialVote, CredentialVoteClient, Error as VoteError};
 use soroban_sdk::{
     auth::{Context, ContractContext, CustomAccountInterface},
     contract, contractimpl,
@@ -176,6 +180,8 @@ struct World<'a> {
     treasury: TreasuryClient<'a>,
     /// The same account, through the `SmartAccount` trait's client.
     account: SmartAccountClient<'a>,
+    /// The second gate: GrantFox's contributor vote, with the same requirement.
+    vote: CredentialVoteClient<'a>,
 }
 
 fn s(e: &Env, v: &str) -> String {
@@ -222,6 +228,20 @@ impl<'a> World<'a> {
                 },
             ],
         };
+        let vote_requirement = credential_vote::Requirement {
+            gate: gate.address.clone(),
+            issuer: issuer.clone(),
+            credential_type: s(&e, CREDENTIAL_TYPE),
+            claims: vec![
+                &e,
+                credential_vote::Claim {
+                    key: s(&e, "tier"),
+                    value: s(&e, "Gold"),
+                },
+            ],
+        };
+        let vote = CredentialVoteClient::new(&e, &e.register(CredentialVote, (vote_requirement,)));
+
         let mut policies: Map<Address, Val> =
             map![&e, (policy.address.clone(), requirement.into_val(&e))];
         if with_threshold {
@@ -244,6 +264,7 @@ impl<'a> World<'a> {
             signer,
             treasury,
             account,
+            vote,
             e,
         }
     }
@@ -375,6 +396,27 @@ impl<'a> World<'a> {
     /// The treasury pays `to`.
     fn pay(&self, to: &Address) -> Result<(), soroban_sdk::Error> {
         self.authorize(self.transfer(to))
+    }
+
+    /// `who` opens a proposal in the contributor vote.
+    fn propose(&self, who: &Address) -> Result<u32, soroban_sdk::Error> {
+        match self
+            .vote
+            .try_propose(who, &s(&self.e, "Fund the docs sprint"))
+        {
+            Ok(Ok(id)) => Ok(id),
+            Err(Ok(err)) => Err(err),
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+
+    /// `who` votes in favor of `proposal`.
+    fn cast(&self, who: &Address, proposal: u32) -> Result<(), soroban_sdk::Error> {
+        match self.vote.try_vote(who, &proposal, &true) {
+            Ok(Ok(())) => Ok(()),
+            Err(Ok(err)) => Err(err),
+            other => panic!("unexpected result: {other:?}"),
+        }
     }
 }
 
@@ -572,4 +614,45 @@ fn a_signer_outside_the_rule_cannot_pay() {
             SmartAccountError::UnauthorizedSigner as u32
         ))
     );
+}
+
+// ───────────────────────────── the second gate ─────────────────────────────
+
+fn not_a_voter<T>() -> Result<T, soroban_sdk::Error> {
+    Err(VoteError::NotCredentialed.into())
+}
+
+#[test]
+fn a_gold_holder_proposes_and_votes_with_the_real_gate() {
+    let w = World::new();
+    let marta = w.holder_with("Gold");
+    let id = w.propose(&marta.address).unwrap();
+    assert_eq!(w.cast(&marta.address, id), Ok(()));
+    assert_eq!(w.vote.proposal(&id).unwrap().in_favor, 1);
+
+    assert_eq!(w.cast(&Address::generate(&w.e), id), not_a_voter());
+    let silver = w.holder_with("Silver");
+    assert_eq!(w.propose(&silver.address), not_a_voter());
+    assert_eq!(w.cast(&silver.address, id), not_a_voter());
+}
+
+/// The pitch line: the same credential opens a payment and a vote, and one
+/// revocation by the issuer closes both. Nobody touched either contract.
+#[test]
+fn one_credential_two_gates_one_revocation() {
+    let w = World::new();
+    let marta = w.holder_with("Gold");
+    let id = w.propose(&marta.address).unwrap();
+
+    assert_eq!(w.pay(&marta.address), Ok(()));
+    assert_eq!(w.cast(&marta.address, id), Ok(()));
+
+    marta
+        .vault
+        .revoke_by_issuer(&marta.vc_id, &s(&w.e, "2026-10-25"));
+
+    assert_eq!(w.pay(&marta.address), rejected());
+    assert_eq!(w.propose(&marta.address), not_a_voter());
+    // The vote already cast stays; the gate only stops new ones.
+    assert_eq!(w.vote.proposal(&id).unwrap().in_favor, 1);
 }
