@@ -10,10 +10,13 @@ import {
   type HolderCredential,
   type HolderView,
   type PaymentResult,
+  type Proposal,
+  type ProposalView,
   type Tier,
+  type VoteActionResult,
 } from "@acta-gate/shared";
 
-import type { GateChain } from "./chain/types.js";
+import { ContractError, type GateChain, type HolderCall } from "./chain/types.js";
 import type { Config } from "./config.js";
 import { HttpError } from "./errors.js";
 
@@ -27,8 +30,10 @@ const MAX_ACTIVITY = 100;
 const short = (address: string) => `${address.slice(0, 4)}…${address.slice(-4)}`;
 
 /**
- * The demo from `docs/IDEA ES.md`: ACTA sponsors Marta's vault, GrantFox issues
- * and registers in `vc-gate`, the treasury pays, GrantFox revokes.
+ * The demo from `docs/IDEA.md`: ACTA sponsors Marta's vault, GrantFox issues
+ * and registers in `vc-gate`, the treasury pays, GrantFox revokes. Next to the
+ * treasury, `credential-vote`: the same credential lets Marta propose and vote,
+ * and the same revocation stops her.
  *
  * Holder → vault is kept in memory: the factory has no index by owner.
  */
@@ -43,19 +48,21 @@ export class Demo {
 
   info(): DemoConfig {
     const { stellar } = this.config;
-    const testnet = this.chain.mode === "testnet";
     return {
-      mode: this.chain.mode,
       network: this.config.STELLAR_NETWORK,
-      explorerUrl: testnet ? stellar.explorerUrl : null,
+      explorerUrl: stellar.explorerUrl,
       credentialType: CREDENTIAL_TYPE,
       requiredTier: this.config.REQUIRED_TIER,
       issuer: { name: this.config.ISSUER_NAME, address: this.chain.issuerAddress },
       treasury: { name: this.config.TREASURY_NAME, address: this.chain.treasuryAddress },
+      vote: this.chain.voteAddress
+        ? { name: this.config.VOTE_NAME, address: this.chain.voteAddress }
+        : null,
       contracts: {
-        vcVaultFactory: testnet ? (this.config.VAULT_FACTORY_ID ?? null) : null,
-        vcGate: testnet ? (this.config.VC_GATE_ID ?? null) : null,
-        credentialPolicy: testnet ? (this.config.CREDENTIAL_POLICY_ID ?? null) : null,
+        vcVaultFactory: this.config.VAULT_FACTORY_ID,
+        vcGate: this.config.VC_GATE_ID,
+        credentialPolicy: this.config.CREDENTIAL_POLICY_ID,
+        credentialVote: this.config.CREDENTIAL_VOTE_ID,
         usdc: stellar.contracts.usdc,
       },
     };
@@ -78,10 +85,11 @@ export class Demo {
       });
       this.log(
         "did_registered",
-        "Cédula creada",
-        `ACTA registró ${registered.did} para ${short(address)}`,
+        "DID created",
+        `ACTA registered ${registered.did} for ${short(address)}`,
         address,
         txHash,
+        { did: registered.did },
       );
     }
     return { holder: await this.view(address), txHash };
@@ -101,8 +109,8 @@ export class Demo {
       });
       this.log(
         "vault_deployed",
-        "Vault creado",
-        `ACTA patrocinó el vault de ${short(address)}`,
+        "Vault created",
+        `ACTA sponsored the vault of ${short(address)}`,
         address,
         txHash,
       );
@@ -128,10 +136,11 @@ export class Demo {
     const issued = await this.chain.issue(holder.vault, vcId, vcData);
     this.log(
       "credential_issued",
-      `Credencial ${tier} emitida`,
+      `${tier} credential issued`,
       `${this.config.ISSUER_NAME} → vault ${short(holder.vault)}`,
       address,
       issued.txHash,
+      { tier, issuer: this.config.ISSUER_NAME, vault: holder.vault },
     );
     holder.credential = { vcId, tier, issuedAt, revokedAt: null };
     return { holder: await this.view(address), txHash: issued.txHash };
@@ -147,10 +156,11 @@ export class Demo {
     const { txHash } = await this.chain.register(holder.vault, vc.vcId, { tier: vc.tier });
     this.log(
       "gate_registered",
-      "Registrada en vc-gate",
-      `tier: ${vc.tier} para ${short(address)}`,
+      "Registered in vc-gate",
+      `tier: ${vc.tier} for ${short(address)}`,
       address,
       txHash,
+      { tier: vc.tier },
     );
     return { holder: await this.view(address), txHash };
   }
@@ -170,10 +180,11 @@ export class Demo {
     holder.credential.revokedAt = date;
     this.log(
       "credential_revoked",
-      "Credencial revocada",
-      `${this.config.ISSUER_NAME} revocó en el vault de ${short(address)}`,
+      "Credential revoked",
+      `${this.config.ISSUER_NAME} revoked in the vault of ${short(address)}`,
       address,
       txHash,
+      { issuer: this.config.ISSUER_NAME },
     );
     return { holder: await this.view(address), txHash };
   }
@@ -184,21 +195,94 @@ export class Demo {
     if (outcome.ok) {
       this.log(
         "payment_sent",
-        `Pago de ${amount} USDC`,
-        `La tesorería le pagó a ${short(to)}`,
+        `Payment of ${amount} USDC`,
+        `The treasury paid ${short(to)}`,
         to,
         outcome.txHash,
+        { amount },
       );
       return { status: "paid", to, amount, reason: null, txHash: outcome.txHash };
     }
     this.log(
       "payment_rejected",
-      "Pago rechazado",
+      "Payment rejected",
       `${short(to)}: ${outcome.reason}`,
       to,
       outcome.txHash,
+      { amount, reason: outcome.reason },
     );
     return { status: "rejected", to, amount, reason: outcome.reason, txHash: outcome.txHash };
+  }
+
+  /** Newest first. With `voter`, says whether they already voted on each one. */
+  async proposals(voter?: string): Promise<ProposalView[]> {
+    this.requireVote();
+    const list = await this.chain.proposals();
+    const views = await Promise.all(
+      list.map(async (p) => ({
+        ...p,
+        hasVoted: voter ? await this.chain.hasVoted(p.id, voter) : false,
+      })),
+    );
+    return views.reverse();
+  }
+
+  /** The holder opens a proposal (`credential-vote.propose`); `vc-gate` decides. */
+  async propose(proposer: string, title: string, auth?: string): Promise<VoteActionResult> {
+    this.requireVote();
+    return this.holderCall(
+      () => this.chain.propose(proposer, title, auth),
+      async (id, txHash) => {
+        this.log(
+          "proposal_created",
+          `Proposal #${id}`,
+          `${short(proposer)}: ${title}`,
+          proposer,
+          txHash,
+          { id: String(id), title },
+        );
+        return this.proposal(id);
+      },
+      (reason) =>
+        this.log(
+          "vote_rejected",
+          "Proposal rejected",
+          `${short(proposer)}: ${reason}`,
+          proposer,
+          null,
+          { action: "propose", reason },
+        ),
+    );
+  }
+
+  /** The holder votes (`credential-vote.vote`); the credential is checked now. */
+  async vote(
+    voter: string,
+    proposal: number,
+    inFavor: boolean,
+    auth?: string,
+  ): Promise<VoteActionResult> {
+    this.requireVote();
+    return this.holderCall(
+      () => this.chain.vote(voter, proposal, inFavor, auth),
+      async (_, txHash) => {
+        this.log(
+          "vote_cast",
+          `Vote ${inFavor ? "in favor" : "against"} · #${proposal}`,
+          `${short(voter)} voted on proposal #${proposal}`,
+          voter,
+          txHash,
+          { id: String(proposal), inFavor: String(inFavor) },
+        );
+        return this.proposal(proposal);
+      },
+      (reason) =>
+        this.log("vote_rejected", "Vote rejected", `${short(voter)}: ${reason}`, voter, null, {
+          action: "vote",
+          id: String(proposal),
+          reason,
+        }),
+    );
   }
 
   async view(address: string): Promise<HolderView> {
@@ -222,11 +306,50 @@ export class Demo {
         isValid: record !== null && (await this.chain.gateIsValid(address)),
         claims: record?.claims ?? {},
       },
+      canVote: this.chain.voteAddress !== null && (await this.chain.canVote(address)),
     };
   }
 
   recentActivity(): ActivityEvent[] {
     return this.activity;
+  }
+
+  /**
+   * Runs a call the holder signs. `unsigned` goes back to the browser as is; a
+   * contract rejection is an answer of the vote, not a server error.
+   */
+  private async holderCall<T>(
+    call: () => Promise<HolderCall<T>>,
+    accepted: (value: T, txHash: string | null) => Promise<Proposal>,
+    rejected: (reason: string) => void,
+  ): Promise<VoteActionResult> {
+    let result: HolderCall<T>;
+    try {
+      result = await call();
+    } catch (err) {
+      if (!(err instanceof ContractError)) throw err;
+      rejected(err.code);
+      return { status: "rejected", reason: err.code, txHash: null };
+    }
+    if (result.status === "unsigned") return result;
+    const proposal = await accepted(result.value, result.txHash);
+    return { status: "accepted", proposal, txHash: result.txHash };
+  }
+
+  private async proposal(id: number): Promise<Proposal> {
+    const found = (await this.chain.proposals()).find((p) => p.id === id);
+    if (!found) throw new HttpError(404, "ProposalNotFound", `No proposal ${id}`);
+    return found;
+  }
+
+  private requireVote() {
+    if (!this.chain.voteAddress) {
+      throw new HttpError(
+        503,
+        "VoteNotDeployed",
+        "credential-vote is not deployed (CREDENTIAL_VOTE_ID)",
+      );
+    }
   }
 
   /** A holder that already has a vault. */
@@ -267,6 +390,7 @@ export class Demo {
     detail: string,
     subject: string,
     txHash: string | null,
+    params: Record<string, string> = {},
   ) {
     this.activity.unshift({
       id: randomUUID(),
@@ -276,6 +400,7 @@ export class Demo {
       detail,
       subject,
       txHash,
+      params,
     });
     this.activity.length = Math.min(this.activity.length, MAX_ACTIVITY);
   }

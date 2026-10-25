@@ -1,10 +1,16 @@
 import { randomBytes } from "node:crypto";
 
-import type { CredentialStatus } from "@acta-gate/shared";
+import { MAX_TITLE_LEN, type CredentialStatus, type Proposal } from "@acta-gate/shared";
 import { Keypair, StrKey } from "@stellar/stellar-sdk";
 
-import { didFromId, newDidId } from "../did.js";
-import { ContractError, type GateChain, type GateRecord, type PaymentOutcome } from "./types.js";
+import { didFromId, newDidId } from "../src/did.js";
+import {
+  ContractError,
+  type GateChain,
+  type GateRecord,
+  type HolderCall,
+  type PaymentOutcome,
+} from "../src/chain/types.js";
 
 interface MockVc {
   issuer: string;
@@ -21,18 +27,23 @@ interface MockVault {
 const randomContract = () => StrKey.encodeContract(randomBytes(32));
 
 /**
- * The contracts' rules, in memory. Mirrors `vc-vault` 0.5.0, `vc-gate` as
- * specified in `docs/IDEA ES.md` and `credential-policy`'s `enforce`, so the
- * demo behaves the same before they are deployed.
+ * A test double: the contracts' rules, in memory, so the API's tests run
+ * without a network. Mirrors `vc-vault` 0.5.0, `vc-gate` as
+ * specified in `docs/IDEA.md`, `credential-policy`'s `enforce` and
+ * `credential-vote`.
+ * The treasury and the vote share one requirement: `tier` = `requiredTier`.
  */
 export class MockChain implements GateChain {
-  readonly mode = "mock" as const;
   readonly issuerAddress = Keypair.random().publicKey();
   readonly treasuryAddress = randomContract();
+  readonly voteAddress = randomContract();
 
   private readonly vaults = new Map<string, MockVault>();
   /** `vc-gate` records keyed by holder (issuer and type are fixed). */
   private readonly records = new Map<string, GateRecord>();
+  /** `credential-vote`: proposals by id, and `${id}:${voter}` once voted. */
+  private readonly proposalList: Proposal[] = [];
+  private readonly votes = new Set<string>();
 
   constructor(private readonly requiredTier: string) {}
 
@@ -95,10 +106,66 @@ export class MockChain implements GateChain {
   }
 
   async pay(to: string): Promise<PaymentOutcome> {
-    const record = this.records.get(to);
-    const ok = (await this.gateIsValid(to)) && record?.claims.tier === this.requiredTier;
-    if (!ok) return { ok: false, reason: "RecipientNotCredentialed", txHash: null };
+    if (!(await this.check(to))) {
+      return { ok: false, reason: "RecipientNotCredentialed", txHash: null };
+    }
     return { ok: true, txHash: null };
+  }
+
+  async canVote(who: string) {
+    return this.check(who);
+  }
+
+  async proposals() {
+    return this.proposalList.map((p) => ({ ...p }));
+  }
+
+  async hasVoted(proposal: number, voter: string) {
+    return this.votes.has(`${proposal}:${voter}`);
+  }
+
+  /** Same order as the contract: the title cap, then the gate. */
+  async propose(proposer: string, title: string): Promise<HolderCall<number>> {
+    if (Buffer.byteLength(title) > MAX_TITLE_LEN) {
+      throw new ContractError("InputTooLong", `The title is above ${MAX_TITLE_LEN} bytes`);
+    }
+    await this.requireCredentialed(proposer);
+    const id = this.proposalList.length;
+    this.proposalList.push({
+      id,
+      proposer,
+      title,
+      inFavor: 0,
+      against: 0,
+      createdAt: new Date().toISOString(),
+    });
+    return { status: "done", value: id, txHash: null };
+  }
+
+  /** Same order as the contract: the proposal, the double vote, then the gate. */
+  async vote(voter: string, proposal: number, inFavor: boolean): Promise<HolderCall<null>> {
+    const p = this.proposalList[proposal];
+    if (!p) throw new ContractError("ProposalNotFound", `No proposal ${proposal}`);
+    if (await this.hasVoted(proposal, voter)) {
+      throw new ContractError("AlreadyVoted", "One vote per address and proposal");
+    }
+    await this.requireCredentialed(voter);
+    if (inFavor) p.inFavor += 1;
+    else p.against += 1;
+    this.votes.add(`${proposal}:${voter}`);
+    return { status: "done", value: null, txHash: null };
+  }
+
+  /** `vc-gate.check(holder, GrantFox, ContributorBadge, { tier })`. */
+  private async check(holder: string) {
+    const record = this.records.get(holder);
+    return (await this.gateIsValid(holder)) && record?.claims.tier === this.requiredTier;
+  }
+
+  private async requireCredentialed(who: string) {
+    if (!(await this.check(who))) {
+      throw new ContractError("NotCredentialed", "vc-gate does not vouch for this address");
+    }
   }
 
   private vault(id: string) {

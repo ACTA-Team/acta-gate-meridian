@@ -1,7 +1,7 @@
-import type { ChainMode, CredentialStatus } from "@acta-gate/shared";
+import type { CredentialStatus, Proposal } from "@acta-gate/shared";
 
 export interface Receipt {
-  /** `null` in mock mode. */
+  /** `null` when nothing was sent. */
   txHash: string | null;
 }
 
@@ -16,6 +16,15 @@ export interface GateRecord {
 export type PaymentOutcome =
   { ok: true; txHash: string | null } | { ok: false; reason: string; txHash: string | null };
 
+/**
+ * A call the holder has to authorize (`require_auth`). Without `auth`, testnet
+ * simulates it and hands back the holder's auth entry to sign with the passkey;
+ * with `auth` (that entry, signed) it submits. The tests' double runs it right away.
+ * A contract rejection is thrown as a `ContractError`.
+ */
+export type HolderCall<T> =
+  { status: "unsigned"; authEntry: string } | { status: "done"; value: T; txHash: string | null };
+
 /** Thrown when a contract rejects a call; `code` is the contract error name. */
 export class ContractError extends Error {
   constructor(
@@ -28,13 +37,14 @@ export class ContractError extends Error {
 
 /**
  * The calls the demo makes, named after the contracts' ABIs
- * (`docs/IDEA ES.md`, `docs/IMPLEMENTATION ES.md` section 8).
+ * (`docs/IDEA.md`, `docs/IMPLEMENTATION.md` section 8).
  * The issuer and the credential type are fixed: GrantFox, `ContributorBadge`.
  */
 export interface GateChain {
-  readonly mode: ChainMode;
   readonly issuerAddress: string;
   readonly treasuryAddress: string;
+  /** `credential-vote`, or `null` when it is not deployed. */
+  readonly voteAddress: string | null;
 
   /**
    * `did-stellar-registry.register_sponsored(ACTA, did_id, record)`: the
@@ -62,4 +72,15 @@ export interface GateChain {
 
   /** The treasury pays USDC; `credential-policy` decides. */
   pay(to: string, amount: string): Promise<PaymentOutcome>;
+
+  /** `credential-vote.can_vote(who)`: one `vc-gate.check` under the vote's requirement. */
+  canVote(who: string): Promise<boolean>;
+  /** `credential-vote.proposal(id)` for every id from 0, oldest first. */
+  proposals(): Promise<Proposal[]>;
+  /** `credential-vote.has_voted(proposal, voter)`. */
+  hasVoted(proposal: number, voter: string): Promise<boolean>;
+  /** `credential-vote.propose(proposer, title)`, signed by the proposer. Returns the id. */
+  propose(proposer: string, title: string, auth?: string): Promise<HolderCall<number>>;
+  /** `credential-vote.vote(voter, proposal, in_favor)`, signed by the voter. */
+  vote(voter: string, proposal: number, inFavor: boolean, auth?: string): Promise<HolderCall<null>>;
 }

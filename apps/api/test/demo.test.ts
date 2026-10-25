@@ -1,16 +1,18 @@
-import { randomBytes } from "node:crypto";
-
-import type { ActionResult, PaymentResult } from "@acta-gate/shared";
-import { StrKey } from "@stellar/stellar-sdk";
+import type {
+  ActionResult,
+  HolderView,
+  PaymentResult,
+  ProposalView,
+  VoteActionResult,
+} from "@acta-gate/shared";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { createApp } from "../src/app.js";
+import type { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { smartAccount, testApp } from "./helpers.js";
 
-const smartAccount = () => StrKey.encodeContract(randomBytes(32));
-
-/** The demo table in `docs/IDEA ES.md`, in mock mode. */
+/** The demo table in `docs/IDEA.md`, against the contracts' rules in memory. */
 describe("demo flow", () => {
   let app: ReturnType<typeof createApp>;
   const marta = smartAccount();
@@ -19,7 +21,7 @@ describe("demo flow", () => {
     (await request(app).post("/payments").send({ to, amount: "25" })).body as PaymentResult;
 
   beforeEach(() => {
-    app = createApp(loadConfig({}));
+    app = testApp();
   });
 
   it("pays a Gold holder, rejects others, and rejects after the issuer revokes", async () => {
@@ -111,7 +113,80 @@ describe("demo flow", () => {
     expect(res.status).toBe(400);
   });
 
-  it("asks for every testnet setting up front", () => {
-    expect(() => loadConfig({ GATE_MODE: "testnet" })).toThrow(/VAULT_FACTORY_ID/);
+  it("asks for every secret up front, and takes the contract IDs from shared", () => {
+    expect(() => loadConfig({})).toThrow(/TREASURY_ADDRESS, SPONSOR_SECRET/);
+    expect(() => loadConfig({})).not.toThrow(/VC_GATE_ID/);
+  });
+});
+
+/** `credential-vote`, the second gate: `integration-tests/tests/treasury.rs`, in memory. */
+describe("contributor vote", () => {
+  let app: ReturnType<typeof createApp>;
+  const marta = smartAccount();
+
+  const holderWith = async (address: string, tier: "Gold" | "Silver") => {
+    await request(app).post("/holders").send({ address });
+    await request(app).post("/credentials").send({ address, tier });
+    await request(app).post("/credentials/register").send({ address });
+  };
+  const propose = async (proposer: string, title = "Fund the docs sprint") =>
+    (await request(app).post("/proposals").send({ proposer, title })).body as VoteActionResult;
+  const vote = async (voter: string, proposal: number, inFavor = true) =>
+    (await request(app).post("/votes").send({ voter, proposal, inFavor })).body as VoteActionResult;
+
+  beforeEach(() => {
+    app = testApp();
+  });
+
+  it("lets a Gold holder propose and vote, and nobody else", async () => {
+    await holderWith(marta, "Gold");
+    expect(((await request(app).get(`/holders/${marta}`)).body as HolderView).canVote).toBe(true);
+
+    const proposed = await propose(marta);
+    expect(proposed).toMatchObject({ status: "accepted", proposal: { id: 0, proposer: marta } });
+    expect(await vote(marta, 0)).toMatchObject({
+      status: "accepted",
+      proposal: { inFavor: 1, against: 0 },
+    });
+    expect(await vote(marta, 0, false)).toMatchObject({
+      status: "rejected",
+      reason: "AlreadyVoted",
+    });
+
+    expect(await vote(smartAccount(), 0)).toMatchObject({ reason: "NotCredentialed" });
+    const silver = smartAccount();
+    await holderWith(silver, "Silver");
+    expect(await propose(silver)).toMatchObject({ reason: "NotCredentialed" });
+    expect(await vote(marta, 7)).toMatchObject({ reason: "ProposalNotFound" });
+
+    const listed = (await request(app).get(`/proposals?voter=${marta}`)).body as ProposalView[];
+    expect(listed).toMatchObject([{ id: 0, inFavor: 1, hasVoted: true }]);
+  });
+
+  it("one credential, two gates, one revocation", async () => {
+    await holderWith(marta, "Gold");
+    const first = await propose(marta);
+    const second = await propose(marta, "Second proposal");
+    if (first.status !== "accepted" || second.status !== "accepted")
+      throw new Error("not accepted");
+
+    expect((await request(app).post("/payments").send({ to: marta })).body.status).toBe("paid");
+    expect((await vote(marta, first.proposal.id)).status).toBe("accepted");
+
+    await request(app).post("/credentials/revoke").send({ address: marta });
+
+    expect((await request(app).post("/payments").send({ to: marta })).body.status).toBe("rejected");
+    expect(await vote(marta, second.proposal.id)).toMatchObject({ reason: "NotCredentialed" });
+    expect(await propose(marta)).toMatchObject({ reason: "NotCredentialed" });
+    // The vote already cast stays; the gate only stops new ones.
+    const listed = (await request(app).get("/proposals")).body as ProposalView[];
+    expect(listed.find((p) => p.id === first.proposal.id)?.inFavor).toBe(1);
+  });
+
+  it("caps the title at 128 bytes", async () => {
+    const res = await request(app)
+      .post("/proposals")
+      .send({ proposer: marta, title: "x".repeat(129) });
+    expect(res.status).toBe(400);
   });
 });

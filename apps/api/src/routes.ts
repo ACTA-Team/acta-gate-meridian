@@ -1,4 +1,4 @@
-import { TIERS } from "@acta-gate/shared";
+import { MAX_TITLE_LEN, TIERS } from "@acta-gate/shared";
 import { StrKey } from "@stellar/stellar-sdk";
 import { Router } from "express";
 import { z } from "zod";
@@ -20,6 +20,26 @@ const PayBody = z.object({
     .regex(/^\d+(\.\d{1,7})?$/, "must be a positive decimal")
     .default("10"),
 });
+/** A `SorobanAuthorizationEntry` in base64, signed by the holder's passkey (testnet). */
+const Auth = z.string().max(8_192).optional();
+const ProposeBody = z.object({
+  proposer: Address,
+  title: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((t) => Buffer.byteLength(t) <= MAX_TITLE_LEN, {
+      message: `must be at most ${MAX_TITLE_LEN} bytes`,
+    }),
+  auth: Auth,
+});
+const VoteBody = z.object({
+  voter: Address,
+  proposal: z.number().int().min(0).max(0xffff_ffff),
+  inFavor: z.boolean(),
+  auth: Auth,
+});
+const ProposalsQuery = z.object({ voter: Address.optional() });
 
 export function demoRouter(demo: Demo) {
   const router = Router();
@@ -65,6 +85,21 @@ export function demoRouter(demo: Demo) {
   router.post("/payments", async (req, res) => {
     const { to, amount } = PayBody.parse(req.body);
     res.json(await demo.pay(to, amount));
+  });
+
+  router.get("/proposals", async (req, res) => {
+    const { voter } = ProposalsQuery.parse(req.query);
+    res.json(await demo.proposals(voter));
+  });
+
+  router.post("/proposals", async (req, res) => {
+    const { proposer, title, auth } = ProposeBody.parse(req.body);
+    res.json(await demo.propose(proposer, title, auth));
+  });
+
+  router.post("/votes", async (req, res) => {
+    const { voter, proposal, inFavor, auth } = VoteBody.parse(req.body);
+    res.json(await demo.vote(voter, proposal, inFavor, auth));
   });
 
   return router;

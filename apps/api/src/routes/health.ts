@@ -1,10 +1,9 @@
-import type { ChainMode } from "@acta-gate/shared";
 import { Router } from "express";
 
-export function healthRouter(mode: ChainMode) {
+export function healthRouter(network: string) {
   const router = Router();
   router.get("/", (_req, res) => {
-    res.json({ status: "ok", mode });
+    res.json({ status: "ok", network });
   });
   return router;
 }

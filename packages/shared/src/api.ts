@@ -1,28 +1,29 @@
 /**
- * The HTTP contract between `apps/api` and `apps/web`.
- *
- * `mock` runs the same rules as the contracts in memory, so the demo works
- * before `vc-gate` and `credential-policy` are deployed. `testnet` calls them.
+ * The HTTP contract between `apps/api` and `apps/web`. The backend calls the
+ * contracts deployed on testnet (`docs/deployments/acta-gate-testnet.md`).
  */
-export type ChainMode = "mock" | "testnet";
-
 export const CREDENTIAL_TYPE = "ContributorBadge";
 export const TIERS = ["Gold", "Silver"] as const;
 export type Tier = (typeof TIERS)[number];
 
 export interface DemoConfig {
-  mode: ChainMode;
   network: string;
-  explorerUrl: string | null;
+  explorerUrl: string;
   credentialType: string;
   /** The tier the treasury's `credential-policy` requires. */
   requiredTier: Tier;
   issuer: { name: string; address: string };
   treasury: { name: string; address: string };
+  /**
+   * `credential-vote`: the second contract that asks `vc-gate`, same requirement.
+   * `null` in testnet while `CREDENTIAL_VOTE_ID` is not set.
+   */
+  vote: { name: string; address: string } | null;
   contracts: {
-    vcVaultFactory: string | null;
-    vcGate: string | null;
-    credentialPolicy: string | null;
+    vcVaultFactory: string;
+    vcGate: string;
+    credentialPolicy: string;
+    credentialVote: string;
     usdc: string;
   };
 }
@@ -55,12 +56,14 @@ export interface HolderView {
     isValid: boolean;
     claims: Record<string, string>;
   };
+  /** `credential-vote.can_vote(holder)`: what the gate answers under the vote's requirement. */
+  canVote: boolean;
 }
 
 /** What every on-chain action returns: the new state and its transaction. */
 export interface ActionResult {
   holder: HolderView;
-  /** `null` in mock mode, or when nothing had to be sent. */
+  /** `null` when nothing had to be sent. */
   txHash: string | null;
 }
 
@@ -71,18 +74,24 @@ export type ActivityKind =
   | "gate_registered"
   | "credential_revoked"
   | "payment_sent"
-  | "payment_rejected";
+  | "payment_rejected"
+  | "proposal_created"
+  | "vote_cast"
+  | "vote_rejected";
 
 export interface ActivityEvent {
   id: string;
   kind: ActivityKind;
   at: string;
+  /** For API consumers. The web app builds its own, localized text from `kind` and `params`. */
   title: string;
   detail: string;
   /** The address the event is about: the holder, or the recipient of a payment. */
   subject: string;
-  /** Present in `testnet` mode. */
+  /** `null` when nothing was sent, e.g. a rejection caught in simulation. */
   txHash: string | null;
+  /** The raw values behind `title` and `detail`, e.g. `{ tier: "Gold" }`. */
+  params: Record<string, string>;
 }
 
 export interface PaymentResult {
@@ -93,6 +102,36 @@ export interface PaymentResult {
   reason: string | null;
   txHash: string | null;
 }
+
+/** `MAX_TITLE_LEN` in `credential-vote`, in bytes. */
+export const MAX_TITLE_LEN = 128;
+
+/** `Proposal` in `credential-vote`. */
+export interface Proposal {
+  id: number;
+  proposer: string;
+  title: string;
+  inFavor: number;
+  against: number;
+  /** ISO date of `created_at`. */
+  createdAt: string;
+}
+
+/** A proposal as seen by one voter: `has_voted(id, voter)`. */
+export interface ProposalView extends Proposal {
+  hasVoted: boolean;
+}
+
+/**
+ * What `POST /proposals` and `POST /votes` return. `propose` and `vote` need
+ * the holder's signature: in testnet the first call answers `unsigned` with the
+ * auth entry for Marta's passkey, and the second one sends it back signed.
+ */
+export type VoteActionResult =
+  | { status: "unsigned"; authEntry: string }
+  | { status: "accepted"; proposal: Proposal; txHash: string | null }
+  /** `reason` is the contract error, e.g. `NotCredentialed` or `AlreadyVoted`. */
+  | { status: "rejected"; reason: string; txHash: null };
 
 export interface ApiError {
   error: { code: string; message: string };

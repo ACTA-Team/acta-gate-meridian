@@ -1,12 +1,30 @@
 import { randomBytes } from "node:crypto";
 
-import { CREDENTIAL_TYPE, type CredentialStatus } from "@acta-gate/shared";
-import { contract, Keypair, rpc } from "@stellar/stellar-sdk";
+import { CREDENTIAL_TYPE, type CredentialStatus, type Proposal } from "@acta-gate/shared";
+import {
+  Address,
+  contract,
+  Keypair,
+  nativeToScVal,
+  rpc,
+  scValToNative,
+  xdr,
+} from "@stellar/stellar-sdk";
 
 import type { Config } from "../config.js";
 import { didFromId, multikeyP256, newDidId } from "../did.js";
+import { invokeAsHolder } from "./holder-call.js";
 import { payFromSmartAccount } from "./treasury.js";
-import { ContractError, type GateChain, type GateRecord, type PaymentOutcome } from "./types.js";
+import {
+  ContractError,
+  type GateChain,
+  type GateRecord,
+  type HolderCall,
+  type PaymentOutcome,
+} from "./types.js";
+
+/** Stops listing proposals here: each one is a read. */
+const MAX_PROPOSALS = 50;
 
 /** ~10 s in total: a lagging RPC node catches up within a ledger or two. */
 const REGISTER_ATTEMPTS = 5;
@@ -35,6 +53,33 @@ const POLICY_ERRORS: Record<number, string> = {
   3: "AllowanceNotPermitted",
   99: "NotImplemented",
 };
+const VOTE_ERRORS: Record<number, string> = {
+  1: "NotCredentialed",
+  2: "ProposalNotFound",
+  3: "AlreadyVoted",
+  4: "InputTooLong",
+  5: "MalformedRequirement",
+};
+
+interface RawProposal {
+  id: number;
+  proposer: string;
+  title: string;
+  in_favor: number;
+  against: number;
+  created_at: bigint | number;
+}
+
+function toProposal(p: RawProposal): Proposal {
+  return {
+    id: Number(p.id),
+    proposer: p.proposer,
+    title: p.title,
+    inFavor: Number(p.in_favor),
+    against: Number(p.against),
+    createdAt: new Date(Number(p.created_at) * 1000).toISOString(),
+  };
+}
 
 function contractErrorCode(err: unknown): number | null {
   const match = /Error\(Contract, #(\d+)\)/.exec(String(err instanceof Error ? err.message : err));
@@ -54,12 +99,12 @@ function rethrow(err: unknown, names: Record<number, string>): never {
  * contract's on-chain spec (`contract.Client.from`), so no bindings are needed.
  *
  * Not exercised yet: it needs the spikes PA (vault 0.5.0 factory) and P8
- * (treasury with `credential-policy`) from `docs/IMPLEMENTATION ES.md`.
+ * (treasury with `credential-policy`) from `docs/IMPLEMENTATION.md`.
  */
 export class StellarChain implements GateChain {
-  readonly mode = "testnet" as const;
   readonly issuerAddress: string;
   readonly treasuryAddress: string;
+  readonly voteAddress: string | null;
 
   private readonly sponsor: Keypair;
   private readonly issuer: Keypair;
@@ -71,6 +116,7 @@ export class StellarChain implements GateChain {
     this.issuer = Keypair.fromSecret(config.ISSUER_SECRET!);
     this.issuerAddress = this.issuer.publicKey();
     this.treasuryAddress = config.TREASURY_ADDRESS!;
+    this.voteAddress = config.CREDENTIAL_VOTE_ID ?? null;
     this.rpc = new rpc.Server(config.stellar.rpcUrl);
   }
 
@@ -240,6 +286,82 @@ export class StellarChain implements GateChain {
     const code = contractErrorCode(result.error);
     const reason = code !== null ? (POLICY_ERRORS[code] ?? `ContractError${code}`) : result.error;
     return { ok: false, reason, txHash: result.txHash };
+  }
+
+  async canVote(who: string) {
+    const vote = await this.client(this.requireVote(), this.issuer);
+    const { result } = await vote.can_vote!({ who });
+    return result === true;
+  }
+
+  /** The contract has no count: read ids from 0 until one is missing. */
+  async proposals() {
+    const vote = await this.client(this.requireVote(), this.issuer);
+    const list: Proposal[] = [];
+    for (let id = 0; id < MAX_PROPOSALS; id++) {
+      const { result } = await vote.proposal!({ id });
+      if (!result) break;
+      list.push(toProposal(result as RawProposal));
+    }
+    return list;
+  }
+
+  async hasVoted(proposal: number, voter: string) {
+    const vote = await this.client(this.requireVote(), this.issuer);
+    const { result } = await vote.has_voted!({ proposal, voter });
+    return result === true;
+  }
+
+  async propose(proposer: string, title: string, auth?: string): Promise<HolderCall<number>> {
+    const args = [new Address(proposer).toScVal(), nativeToScVal(title, { type: "string" })];
+    const done = await this.asHolder("propose", proposer, args, auth);
+    if (done.status === "unsigned") return done;
+    return { status: "done", value: Number(scValToNative(done.returnValue!)), txHash: done.txHash };
+  }
+
+  async vote(
+    voter: string,
+    proposal: number,
+    inFavor: boolean,
+    auth?: string,
+  ): Promise<HolderCall<null>> {
+    const args = [
+      new Address(voter).toScVal(),
+      xdr.ScVal.scvU32(proposal),
+      xdr.ScVal.scvBool(inFavor),
+    ];
+    const done = await this.asHolder("vote", voter, args, auth);
+    if (done.status === "unsigned") return done;
+    return { status: "done", value: null, txHash: done.txHash };
+  }
+
+  /**
+   * `propose` and `vote` call `require_auth` on the holder: Marta signs with
+   * her passkey in the browser, and ACTA's sponsor pays the fee.
+   */
+  private async asHolder(method: string, holder: string, args: xdr.ScVal[], auth?: string) {
+    const result = await invokeAsHolder(
+      {
+        server: this.rpc,
+        networkPassphrase: this.config.stellar.networkPassphrase,
+        feePayer: this.sponsor,
+        contract: this.requireVote(),
+        method,
+        args,
+        holder,
+      },
+      auth,
+    );
+    if (!result.ok) rethrow(new Error(result.error), VOTE_ERRORS);
+    if (result.status === "unsigned") return result;
+    // So the next read (often on another node) already sees the new tally.
+    await this.settle((await this.rpc.getLatestLedger()).sequence);
+    return result;
+  }
+
+  private requireVote(): string {
+    if (!this.voteAddress) throw new Error("CREDENTIAL_VOTE_ID is not set");
+    return this.voteAddress;
   }
 
   /**
