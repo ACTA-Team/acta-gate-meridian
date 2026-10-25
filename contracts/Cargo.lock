@@ -581,6 +581,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "did-stellar-registry"
+version = "0.3.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1927,6 +1934,20 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
 name = "vc-gate"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
+name = "vc-vault-contract"
+version = "0.4.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
+name = "vc-vault-factory-contract"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk",

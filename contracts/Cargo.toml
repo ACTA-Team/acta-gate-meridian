@@ -1,12 +1,22 @@
 [workspace]
 resolver = "2"
-members = ["vc-gate", "credential-policy"]
+members = [
+    # ACTA's contracts, from ACTA-Team/contracts-acta (dev @ 282fe47), modified here
+    "vc-vault",
+    "vc-vault-factory",
+    "did-stellar-registry",
+    # ACTA Gate
+    "vc-gate",
+    "credential-policy",
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 publish = false
+# Only ACTA's contracts inherit this: it is where they come from.
+repository = "https://github.com/ACTA-Team/contracts-acta"
 
 [workspace.dependencies]
 soroban-sdk      = "26.1.0"
