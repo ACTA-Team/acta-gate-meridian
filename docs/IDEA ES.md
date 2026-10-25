@@ -119,6 +119,7 @@ __constructor(vault_factory: Address)
 | `register(issuer, vault, vc_id, credential_type, claims)` | `issuer` | Vincula una credencial que el emisor ya emitió, con sus claims públicos |
 | `is_valid(holder, issuer, credential_type)` | — | `bool` |
 | `has_claim(holder, issuer, credential_type, key, value)` | — | `bool` |
+| `check(holder, issuer, credential_type, claims)` | — | `bool`: `is_valid` más todos los claims, en una sola llamada |
 | `get_record(holder, issuer, credential_type)` | — | `Option<GateRecord>` |
 
 `vc-gate` no tiene `revoke`: el emisor revoca en el vault, y el gate lo ve en la
@@ -149,7 +150,9 @@ r.vault.verify_vc(r.vc_id) == Valid                (revocación del titular y de
 !r.vault.is_revoked()                              (el vault entero)
 ```
 
-`has_claim` es `is_valid` más `r.claims[key] == value`.
+`has_claim` es `is_valid` más `r.claims[key] == value`. `check` es `is_valid` más
+todos los claims que le pasen de una vez, para que quien necesita varios no pague una
+llamada cruzada por cada uno: es lo que usa `credential-policy`.
 
 ### Tipos y almacenamiento
 
@@ -201,7 +204,8 @@ pub struct Requirement {
 
 Si `claims` está vacío, sirve cualquier credencial válida de ese tipo. Se guarda por
 `(smart_account, context_rule_id)`, como exige OpenZeppelin para policies
-compartidas entre cuentas.
+compartidas entre cuentas. Dos claims con la misma clave se contradicen: `enforce`
+falla cerrado con `MalformedRequirement`.
 
 ### `enforce`
 
@@ -212,11 +216,11 @@ authenticated_signers no está vacío                             si no, NoSigne
              target_args) de la propia cuenta, se usa (target_fn, target_args)
 fn == "transfer":
     recipient = args[1]               (un MuxedAddress se resuelve a su cuenta base)
-    ok = gate.is_valid(recipient, issuer, type)
-         y, por cada claim, gate.has_claim(recipient, issuer, type, key, value)
+    ok = gate.check(recipient, issuer, type, claims)      (una sola llamada cruzada)
     ok                                                          si no, RecipientNotCredentialed
 fn == "approve":                                                     AllowanceNotPermitted
 transfer o execute con argumentos que no se pueden leer:              MalformedCall
+claims con la misma clave dos veces:                                  MalformedRequirement
 cualquier otra: se permite        (las llamadas administrativas de la cuenta siguen funcionando)
 ```
 
@@ -234,6 +238,12 @@ de OpenZeppelin lo hacen concreto:
 - **Se revisa el `transfer` de cualquier token**, no solo el de USDC.
 - **`approve` se rechaza.** Si no, un permiso seguido de `transfer_from` se saltaría
   el chequeo.
+- **Instalarla sobre una cuenta sin permisos vivos.** Rechazar `approve` cierra el
+  bypass hacia adelante, pero un permiso otorgado *antes* de instalar la policy no
+  pasa por el `__check_auth` de la tesorería: el `transfer_from` lo firma el
+  autorizado. Cuenta nueva, o verificar que no haya ninguno.
+- **`burn` pasa.** No le paga a nadie, así que no es un pago sin credencial, pero
+  destruye fondos. Queda del lado de la gobernanza, igual que desinstalar la policy.
 - **La policy limita los pagos, no la gobernanza.** Quien cumpla el umbral puede
   desinstalarla.
 
@@ -306,15 +316,18 @@ referencia, están en [`deployments/`](deployments/).
 ## Limitaciones
 
 - **Si el titular mueve la credencial a otro de sus vaults (`push`)**, el registro
-  del gate queda apuntando al vault anterior y `is_valid` da false hasta que se
-  vuelva a registrar. El `issuer` viaja con la credencial, así que revincularla se
-  puede hacer de forma segura; queda en el roadmap.
+  del gate queda apuntando al vault anterior y `is_valid` da false hasta que el
+  emisor vuelva a llamar `register`. **El contrato no necesita nada nuevo:** `push`
+  es owner-scoped (`receive_push` rechaza con `PushOwnerMismatch` si el dueño del
+  destino es otro), así que `vault_owner` no cambia, la clave
+  `(holder, issuer, credential_type)` es la misma y el registro se reemplaza. Falta
+  la plomería del backend que detecte el push y vuelva a registrar.
 - **Las revocaciones viven en el vault**, que es lo correcto, pero una credencial
   que no está registrada en `vc-gate` no existe para el gate.
 
 ## Roadmap
 
-- **Revincular después de un `push`**, usando el `issuer` que conserva la credencial.
+- **Detectar un `push` y volver a registrar** desde el backend; el contrato ya lo soporta (ver Limitaciones).
 - **Llevar los cambios del vault al repo público** de ACTA, y desplegarlos en mainnet.
 - **Pasar al modelo Merkle** cuando se lance: el gate mantiene la misma interfaz
   (`is_valid`, `has_claim`) y solo cambia de dónde lee.

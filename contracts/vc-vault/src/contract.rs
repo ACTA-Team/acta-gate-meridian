@@ -181,6 +181,12 @@ impl VcVaultTrait for VcVaultContract {
         }
         let vc = vc_opt.unwrap();
         storage::extend_vc_ttl(&e, &vc_id);
+        // `issue` and `receive_push` always store this vault as the issuance
+        // contract, so the delegation below is unreachable today. Keep it that
+        // way: it returns whatever the other contract says and never reads
+        // `read_vc_status`, so a credential reached through it would ignore
+        // both `revoke` and `revoke_by_issuer`. `vc-gate` answers `is_valid`
+        // and `check` through here.
         let issuance_contract = vc.issuance_contract;
         if issuance_contract == e.current_contract_address() {
             return storage::read_vc_status(&e, &vc_id);

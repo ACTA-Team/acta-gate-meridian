@@ -21,8 +21,12 @@ este repo.
 
 Además:
 - **La versión sube a 0.5.0**, con el evento nuevo `VCRevokedByIssuer`.
-- **El campo `issuance_contract` queda como estaba.** Estaba pensado para delegar el
-  estado a otro contrato, pero ningún flujo lo usa.
+- **El campo `issuance_contract` queda como estaba.** `issue` y `receive_push` siempre
+  lo fijan a este vault, así que la rama de `verify_vc` que delega a otro contrato
+  ([`contract.rs:183`](../contracts/vc-vault/src/contract.rs#L183)) es inalcanzable.
+  Queda comentada en el código porque, si algún flujo futuro permitiera setearlo, esa
+  rama devolvería lo que diga el otro contrato **sin leer `read_vc_status`**: se
+  saltaría `revoke` y `revoke_by_issuer`, y el `is_valid` del gate pasa por ahí.
 - **Tests:** 9 nuevos en `vc-vault` y 1 en `vc-vault-factory`.
   - Que `issue` y `batch_issue` guarden al emisor, y que `push` lo conserve.
   - Que `revoke_by_issuer` pida exactamente la firma del emisor, y que el dueño no
@@ -184,7 +188,36 @@ pub fn is_valid(e: Env, holder: Address, issuer: Address, credential_type: Strin
 - `verify_vc` **extiende el TTL** de la credencial, o sea que escribe. Dentro de una
   transacción real cuesta un poco más; en una simulación no importa.
 
-### 5.4 Decisiones de diseño
+### 5.4 `check`: un solo salto para varios claims
+
+`credential-policy` necesita validez **y** todos los claims. Con `is_valid` más un
+`has_claim` por claim eran `1+N` llamadas cruzadas al gate, y cada una volvía a
+llamar dos veces al vault (`try_verify_vc` + `try_is_revoked`): con 3 claims, 9
+saltos y 3 extensiones de TTL redundantes, todo dentro de `__check_auth`, donde el
+presupuesto de CPU es escaso.
+
+```rust
+pub fn check(e: Env, holder: Address, issuer: Address,
+             credential_type: String, claims: Map<String, String>) -> bool {
+    match storage::read_record(&e, &holder, &issuer, &credential_type) {
+        // Compara los claims primero: un claim que no coincide no gasta el salto.
+        Some(record) => {
+            claims.iter().all(|(k, v)| record.claims.get(k) == Some(v))
+                && vault_says_valid(&e, &record)
+        }
+        None => false,
+    }
+}
+```
+
+- **Un mapa vacío es `is_valid`:** `all` sobre nada es true.
+- **`is_valid` y `has_claim` se quedan.** Son la ABI pública que puede usar cualquier
+  otro contrato; `check` es aditivo.
+- **`Requirement.claims` es un `Vec`,** así que puede traer la misma clave dos veces
+  con valores distintos. Pasarlo a `Map` se quedaría con uno solo y perdería la otra
+  exigencia, así que un requirement así falla cerrado con `MalformedRequirement`.
+
+### 5.5 Decisiones de diseño
 
 - **Clave `(holder, issuer, credential_type)`.** Un registro nuevo del mismo tipo
   reemplaza al anterior (por ejemplo, Silver → Gold). Si se necesitara más de una
@@ -261,13 +294,10 @@ fn enforce(e: &Env, context: Context, signers: Vec<Signer>, rule: ContextRule, a
 
     if fn_name == symbol_short!("transfer") {
         let to = MuxedAddress::try_from_val(e, &args.get(1).unwrap()).unwrap().address();
-        let req = storage::requirement(e, &account, rule.id);
-        let gate = GateClient::new(e, &req.gate);
-        let ok = gate.is_valid(&to, &req.issuer, &req.credential_type)
-            && req.claims.iter().all(|c| {
-                gate.has_claim(&to, &req.issuer, &req.credential_type, &c.key, &c.value)
-            });
-        if !ok { panic_with_error!(e, Error::RecipientNotCredentialed) }
+        // Una sola llamada cruzada, con los claims que haga falta (§5.4).
+        if !recipient_is_credentialed(e, &account, rule.id, &to) {
+            panic_with_error!(e, Error::RecipientNotCredentialed)
+        }
     } else if fn_name == symbol_short!("approve") {
         panic_with_error!(e, Error::AllowanceNotPermitted);  // un permiso + transfer_from saltaría el chequeo
     }
@@ -283,6 +313,14 @@ fn enforce(e: &Env, context: Context, signers: Vec<Signer>, rule: ContextRule, a
   credencial".
 - **`approve` se rechaza.** Si no, la tesorería podría dar un permiso, y el
   `transfer_from` del autorizado lo firmaría el autorizado, nunca la tesorería.
+- **Un permiso anterior a la instalación es invisible.** Rechazar `approve` cierra el
+  bypass hacia adelante, pero un `transfer_from` contra un permiso ya otorgado lo
+  firma el autorizado: nunca pasa por el `__check_auth` de la tesorería. Es una
+  precondición de despliegue (§7), no algo que `enforce` pueda ver.
+- **`burn` pasa.** Cada `require_auth` sobre la tesorería genera su propio contexto,
+  así que la policy sí ve el `transfer` que hace un contrato intermedio. Pero
+  `burn(from = tesorería)` cae en el "cualquier otra: se permite": no le paga a
+  nadie, aunque destruye fondos. Queda del lado de la gobernanza.
 - **La policy limita los pagos, no la gobernanza.** Quien cumpla el umbral igual
   puede desinstalarla.
 
@@ -297,6 +335,7 @@ fn enforce(e: &Env, context: Context, signers: Vec<Signer>, rule: ContextRule, a
 | Reglas | **Una**: `Default` → policies `{ umbral (1 de 1), credential-policy }` |
 | Parámetros de `credential-policy` | `gate`, la dirección de GrantFox, `"ContributorBadge"`, `claims: [{ tier: Gold }]` |
 | Fondos | USDC de testnet de Circle (`CBIELTK6…`) |
+| Precondición | **Sin permisos (`approve`) vivos al instalar la policy.** Un `transfer_from` contra un permiso previo lo firma el autorizado y no pasa por el `__check_auth` de la tesorería. Cuenta nueva, o verificar que no haya ninguno |
 
 ---
 
