@@ -8,8 +8,9 @@
 mod test;
 
 use soroban_sdk::{
-    auth::Context, contract, contracterror, contractimpl, contracttype, panic_with_error, Address,
-    Env, String, Vec,
+    auth::Context, contract, contractclient, contracterror, contractimpl, contracttype,
+    panic_with_error, symbol_short, Address, Env, MuxedAddress, String, Symbol, TryFromVal, Val,
+    Vec,
 };
 use stellar_accounts::{
     policies::Policy,
@@ -24,8 +25,8 @@ pub enum Error {
     RecipientNotCredentialed = 2,
     AllowanceNotPermitted = 3,
     NotInstalled = 4,
-    /// Scaffold only: removed once `enforce` is implemented.
-    NotImplemented = 99,
+    /// A `transfer` or `execute` whose arguments cannot be read. Fails closed.
+    MalformedCall = 5,
 }
 
 #[contracttype]
@@ -55,6 +56,20 @@ enum DataKey {
     Requirement(Address, u32),
 }
 
+#[allow(dead_code)]
+#[contractclient(name = "GateClient")]
+trait Gate {
+    fn is_valid(e: Env, holder: Address, issuer: Address, credential_type: String) -> bool;
+    fn has_claim(
+        e: Env,
+        holder: Address,
+        issuer: Address,
+        credential_type: String,
+        key: String,
+        value: String,
+    ) -> bool;
+}
+
 #[contract]
 pub struct CredentialPolicy;
 
@@ -75,7 +90,6 @@ impl CredentialPolicy {
 impl Policy for CredentialPolicy {
     type AccountParams = Requirement;
 
-    #[allow(unused_variables)]
     fn enforce(
         e: &Env,
         context: Context,
@@ -88,9 +102,41 @@ impl Policy for CredentialPolicy {
         if authenticated_signers.is_empty() {
             panic_with_error!(e, Error::NoSigners);
         }
-        // TODO: unwrap `execute` (trap 3), check the `transfer` recipient, reject `approve`.
-        // Fails closed until implemented.
-        panic_with_error!(e, Error::NotImplemented)
+
+        let (fn_name, args) = match context {
+            // Trap 3: `execute(target, target_fn, target_args)` hides the inner call.
+            Context::Contract(c)
+                if c.contract == smart_account && c.fn_name == symbol_short!("execute") =>
+            {
+                let inner_fn = c.args.get(1).and_then(|v| Symbol::try_from_val(e, &v).ok());
+                let inner_args = c
+                    .args
+                    .get(2)
+                    .and_then(|v| Vec::<Val>::try_from_val(e, &v).ok());
+                match (inner_fn, inner_args) {
+                    (Some(f), Some(a)) => (f, a),
+                    _ => panic_with_error!(e, Error::MalformedCall),
+                }
+            }
+            Context::Contract(c) => (c.fn_name, c.args),
+            // Deploying a contract is not a payment.
+            _ => return,
+        };
+
+        if fn_name == symbol_short!("transfer") {
+            // Since protocol 23 the SAC takes `to: MuxedAddress`; `.address()` is the base account.
+            let to = match args.get(1).map(|v| MuxedAddress::try_from_val(e, &v)) {
+                Some(Ok(to)) => to.address(),
+                _ => panic_with_error!(e, Error::MalformedCall),
+            };
+            if !recipient_is_credentialed(e, &smart_account, context_rule.id, &to) {
+                panic_with_error!(e, Error::RecipientNotCredentialed);
+            }
+        } else if fn_name == symbol_short!("approve") {
+            // An allowance plus `transfer_from` would skip the check.
+            panic_with_error!(e, Error::AllowanceNotPermitted);
+        }
+        // Anything else is allowed: the account's own admin calls keep working.
     }
 
     fn install(
@@ -112,4 +158,20 @@ impl Policy for CredentialPolicy {
         }
         e.storage().persistent().remove(&key);
     }
+}
+
+fn recipient_is_credentialed(e: &Env, account: &Address, rule_id: u32, to: &Address) -> bool {
+    let key = DataKey::Requirement(account.clone(), rule_id);
+    let req: Requirement = match e.storage().persistent().get(&key) {
+        Some(r) => r,
+        None => panic_with_error!(e, Error::NotInstalled),
+    };
+    let gate = GateClient::new(e, &req.gate);
+    // `has_claim` already includes `is_valid`.
+    if req.claims.is_empty() {
+        return gate.is_valid(to, &req.issuer, &req.credential_type);
+    }
+    req.claims
+        .iter()
+        .all(|c| gate.has_claim(to, &req.issuer, &req.credential_type, &c.key, &c.value))
 }
