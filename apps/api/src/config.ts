@@ -3,7 +3,16 @@ import { z } from "zod";
 
 const Env = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
-  CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  /** The web app's origins, comma-separated: e.g. the Vercel domain and http://localhost:3000. */
+  CORS_ORIGIN: z
+    .string()
+    .default("http://localhost:3000")
+    .transform((v) =>
+      v
+        .split(",")
+        .map((o) => o.trim())
+        .filter(Boolean),
+    ),
   STELLAR_NETWORK: z.enum(["testnet"]).default("testnet"),
   ISSUER_NAME: z.string().default("GrantFox"),
   TREASURY_NAME: z.string().default("GrantFox Treasury"),

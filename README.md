@@ -51,6 +51,11 @@ pnpm turbo run test --filter=@acta-gate/contracts
 
 Environment variables: copy `apps/api/.env.example` and `apps/web/.env.example` to `.env`.
 
+Deployed: the api runs on Railway at https://backend-gate.acta.build (`railway.json`), and the
+web uses it by default; point `NEXT_PUBLIC_API_URL` at `http://localhost:4000` to use a local
+api. The web deploys to Vercel with `apps/web` as its root directory (`apps/web/vercel.json`).
+The api's `CORS_ORIGIN` takes every web origin, comma-separated.
+
 ## The demo
 
 Run `pnpm dev` and open http://localhost:3000. The console follows the five steps in

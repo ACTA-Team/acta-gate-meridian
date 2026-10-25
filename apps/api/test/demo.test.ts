@@ -117,6 +117,14 @@ describe("demo flow", () => {
     expect(() => loadConfig({})).toThrow(/SPONSOR_SECRET/);
     expect(() => loadConfig({})).not.toThrow(/VC_GATE_ID|ISSUER_SECRET/);
   });
+
+  it("takes several web origins for CORS", () => {
+    const config = loadConfig({
+      SPONSOR_SECRET: "x",
+      CORS_ORIGIN: "https://acta-gate.vercel.app, http://localhost:3000",
+    });
+    expect(config.CORS_ORIGIN).toEqual(["https://acta-gate.vercel.app", "http://localhost:3000"]);
+  });
 });
 
 /** `credential-vote`, the second gate: `integration-tests/tests/treasury.rs`, in memory. */

@@ -10,7 +10,8 @@ import type {
   VoteActionResult,
 } from "@acta-gate/shared";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+/** The deployed backend unless `NEXT_PUBLIC_API_URL` points elsewhere (e.g. a local one). */
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://backend-gate.acta.build";
 
 export class ApiRequestError extends Error {
   constructor(
