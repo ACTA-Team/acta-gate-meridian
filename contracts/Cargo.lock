@@ -3,6 +3,17 @@
 version = 4
 
 [[package]]
+name = "acta-gate-integration-tests"
+version = "0.1.0"
+dependencies = [
+ "credential-policy",
+ "soroban-sdk",
+ "stellar-accounts",
+ "vc-gate",
+ "vc-vault-factory-contract",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
