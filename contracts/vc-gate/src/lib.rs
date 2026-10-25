@@ -1,8 +1,10 @@
 #![no_std]
-//! `vc-gate`: issuers issue through it into an ACTA `vc-vault`, so it can record
-//! what the vault does not: who issued the credential, what it claims, and the
-//! issuer's own revocation. Spec: `docs/IDEA ES.md`, section "Contrato: vc-gate".
+//! `vc-gate`: lets a contract go from a holder's address to a credential in
+//! their `vc-vault`, plus the public claims a gate needs (e.g. `tier: Gold`).
+//! Spec: `docs/IDEA ES.md`, section "Contrato: vc-gate".
 //!
+//! The vault is the source of truth: it records the issuer and both
+//! revocations. `vc-gate` only indexes, and re-checks the vault on every read.
 //! No admin and no upgrade path: the vault factory is fixed in the constructor.
 
 mod error;
@@ -30,36 +32,28 @@ impl VcGate {
         storage::config(&e)
     }
 
-    /// Issues into `vault` on the issuer's behalf and records the issuer.
-    #[allow(unused_variables, clippy::too_many_arguments)]
-    pub fn issue(
+    /// The issuer links a credential it issued into `vault`, with the claims
+    /// the gate exposes.
+    #[allow(unused_variables)]
+    pub fn register(
         e: Env,
         issuer: Address,
         vault: Address,
         vc_id: String,
-        vc_data: String,
-        issuer_did: String,
         credential_type: String,
         claims: Map<String, String>,
     ) {
         issuer.require_auth();
-        // TODO: is_vault, caps, vault.issue (the issuer's auth covers it and the fee),
-        // vault_owner, store the GateRecord. `docs/IMPLEMENTATION ES.md` section 5.2.
+        // TODO: is_vault, caps, vault.get_vc(vc_id).issuer == issuer, verify_vc == Valid,
+        // holder = vault_owner, store the GateRecord. `docs/IMPLEMENTATION ES.md` section 5.2.
         panic_with_error!(&e, Error::NotImplemented)
     }
 
-    /// The issuer revokes what it issued.
-    #[allow(unused_variables)]
-    pub fn revoke(e: Env, issuer: Address, holder: Address, credential_type: String) {
-        issuer.require_auth();
-        // TODO: RecordNotFound / AlreadyRevoked, set revoked_by_issuer, emit Revoked.
-        panic_with_error!(&e, Error::NotImplemented)
-    }
-
-    /// Re-checks the issuer's revocation and the vault's `verify_vc` on every call.
+    /// Re-checks the vault on every call: `verify_vc` (holder and issuer
+    /// revocations) and `is_revoked`.
     #[allow(unused_variables)]
     pub fn is_valid(e: Env, holder: Address, issuer: Address, credential_type: String) -> bool {
-        // TODO: record exists, !revoked_by_issuer, vault.try_verify_vc == Valid.
+        // TODO: record exists, vault.try_verify_vc == Valid, !vault.is_revoked().
         false
     }
 

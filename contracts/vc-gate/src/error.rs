@@ -6,8 +6,10 @@ use soroban_sdk::contracterror;
 pub enum Error {
     NotAVault = 1,
     InputTooLong = 2,
-    RecordNotFound = 3,
-    AlreadyRevoked = 4,
-    /// Scaffold only: removed once `issue` and `revoke` are implemented.
+    /// The credential is not in the vault, or `get_vc(id).issuer` is someone else.
+    NotTheIssuer = 3,
+    /// The credential is revoked (by the holder or the issuer) or the vault is.
+    CredentialNotValid = 4,
+    /// Scaffold only: removed once `register` is implemented.
     NotImplemented = 99,
 }

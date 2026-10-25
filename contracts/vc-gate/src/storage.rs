@@ -6,7 +6,7 @@ use crate::types::{Config, GateRecord};
 #[allow(clippy::large_enum_variant)] // storage keys are host handles, never moved around in bulk
 enum DataKey {
     Config,
-    /// `(holder, issuer, credential_type)`. A new issuance of the same type replaces it.
+    /// `(holder, issuer, credential_type)`. A new registration of the same type replaces it.
     Record(Address, Address, String),
 }
 

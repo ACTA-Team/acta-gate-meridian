@@ -31,28 +31,21 @@ fn unknown_record_is_none_and_invalid() {
 }
 
 #[test]
-fn issue_and_revoke_fail_closed_until_implemented() {
+fn register_fails_closed_until_implemented() {
     let e = Env::default();
     e.mock_all_auths();
     let (client, _) = setup(&e);
     let issuer = Address::generate(&e);
     let vault = Address::generate(&e);
-    let holder = Address::generate(&e);
-    let s = |v: &str| String::from_str(&e, v);
 
-    let issued = client.try_issue(
+    let registered = client.try_register(
         &issuer,
         &vault,
-        &s("vc-1"),
-        &s("{}"),
-        &s("did:stellar:testnet:aaaqeayeaudaocajbifqydiob4"),
-        &s("ContributorBadge"),
+        &String::from_str(&e, "vc-1"),
+        &String::from_str(&e, "ContributorBadge"),
         &Map::new(&e),
     );
     // The stub panics with the contract error; `try_` surfaces it as `soroban_sdk::Error`.
     let not_implemented = soroban_sdk::Error::from(Error::NotImplemented);
-    assert_eq!(issued, Err(Ok(not_implemented)));
-
-    let revoked = client.try_revoke(&issuer, &holder, &s("ContributorBadge"));
-    assert_eq!(revoked, Err(Ok(not_implemented)));
+    assert_eq!(registered, Err(Ok(not_implemented)));
 }
