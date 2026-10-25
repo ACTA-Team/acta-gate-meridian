@@ -8,6 +8,8 @@ members = [
     # ACTA Gate
     "vc-gate",
     "credential-policy",
+    # Test-only: the treasury through a real smart account
+    "integration-tests",
 ]
 
 [workspace.package]
