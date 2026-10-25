@@ -1,0 +1,22 @@
+{
+  "name": "@acta-gate/shared",
+  "private": true,
+  "description": "Network config and deployed contract IDs shared by the api and the web app.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@acta-gate/typescript-config": "workspace:*",
+    "@types/node": "^22.20.5",
+    "typescript": "5.9.3"
+  }
+}

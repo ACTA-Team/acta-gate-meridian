@@ -1,0 +1,23 @@
+{
+  "name": "acta-gate",
+  "private": true,
+  "description": "ACTA Gate: any Soroban contract can require a valid verifiable credential.",
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10",
+    "turbo": "^2.11.8",
+    "typescript": "5.9.3"
+  }
+}

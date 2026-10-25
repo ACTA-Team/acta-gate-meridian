@@ -1,0 +1,9 @@
+{
+  "name": "@acta-gate/typescript-config",
+  "private": true,
+  "files": [
+    "base.json",
+    "node.json",
+    "nextjs.json"
+  ]
+}

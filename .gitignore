@@ -1,0 +1,36 @@
+# deps
+node_modules/
+
+# builds
+dist/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+target/
+
+# turbo
+.turbo/
+
+# env
+.env
+.env.*
+!.env.example
+
+# stellar cli
+.stellar/
+
+# circuits (generated)
+circuits/build/
+*.ptau
+*.zkey
+*.r1cs
+*.wtns
+
+# misc
+.DS_Store
+coverage/
+*.log
+
+# soroban test snapshots
+test_snapshots/

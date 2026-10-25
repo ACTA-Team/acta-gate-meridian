@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build typecheck lint test --filter=!@acta-gate/contracts
+
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts
+      - uses: stellar/stellar-cli@v28.1.0
+      - run: cargo fmt --all --check
+      # vc-vault-factory's tests import this WASM at compile time (clippy and test).
+      - run: cargo build -p vc-vault-contract --target wasm32v1-none --release
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: stellar contract build
