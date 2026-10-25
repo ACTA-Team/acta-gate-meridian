@@ -2,7 +2,7 @@
 //! `credential-policy`: an OpenZeppelin smart-account `Policy` that only lets a
 //! treasury pay addresses holding a valid credential.
 //! Spec: `docs/IDEA ES.md`, section "Contrato: credential-policy", and the three
-//! traps in `docs/IMPLEMENTATION ES.md` section 5.
+//! traps in `docs/IMPLEMENTATION ES.md` section 6.
 
 #[cfg(test)]
 mod test;
@@ -38,10 +38,10 @@ pub struct Claim {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Requirement {
-    /// The `vc-verifier` contract.
-    pub verifier: Address,
-    /// The issuer anchor whose credentials count.
-    pub anchor: Address,
+    /// The `vc-gate` contract.
+    pub gate: Address,
+    /// The issuer whose credentials count, as recorded by `vc-gate`.
+    pub issuer: Address,
     pub credential_type: String,
     /// Every claim must match, e.g. `[Claim { key: "tier", value: "Gold" }]`.
     /// Empty means any valid credential of `credential_type`.

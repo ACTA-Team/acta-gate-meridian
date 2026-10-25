@@ -871,7 +871,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
 dependencies = [
  "hash32",
- "serde",
  "stable_deref_trait",
 ]
 
@@ -1927,12 +1926,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
-name = "vc-verifier"
+name = "vc-gate"
 version = "0.1.0"
 dependencies = [
- "heapless",
- "serde",
- "serde-json-core",
  "soroban-sdk",
 ]
 

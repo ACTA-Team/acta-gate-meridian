@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["vc-verifier", "credential-policy"]
+members = ["vc-gate", "credential-policy"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,9 +11,6 @@ publish = false
 [workspace.dependencies]
 soroban-sdk      = "26.1.0"
 stellar-accounts = "0.7.2"
-serde            = { version = "1", default-features = false, features = ["derive"] }
-serde-json-core  = { version = "0.6.0", default-features = false }
-heapless         = { version = "0.8", features = ["serde"] }
 
 [profile.release]
 opt-level = "z"

@@ -1,7 +1,7 @@
 {
   "name": "@acta-gate/contracts",
   "private": true,
-  "description": "Soroban contracts: vc-verifier and credential-policy.",
+  "description": "Soroban contracts: vc-gate and credential-policy.",
   "scripts": {
     "build": "stellar contract build",
     "test": "cargo test",
