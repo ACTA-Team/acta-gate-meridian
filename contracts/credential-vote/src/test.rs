@@ -2,11 +2,14 @@ extern crate std;
 
 use soroban_sdk::{
     contract, contractimpl,
-    testutils::{Address as _, Ledger},
+    testutils::{storage::Persistent, Address as _, Ledger},
     Address, Env, Map, String, Vec,
 };
 
-use crate::{Claim, CredentialVote, CredentialVoteClient, Error, Requirement};
+use crate::{
+    storage::{DataKey, TTL_EXTEND_TO, TTL_THRESHOLD},
+    Claim, CredentialVote, CredentialVoteClient, Error, Requirement,
+};
 
 /// Stands in for `vc-gate`: a holder is valid with the tier stored for them.
 #[contract]
@@ -246,4 +249,31 @@ fn claims_are_all_required() {
     let t = setup(&[("tier", "Gold"), ("role", "maintainer")]);
     // The fake gate only knows `tier`, so `role` never matches.
     assert_eq!(t.propose(&t.marta), err(Error::NotCredentialed));
+}
+
+#[test]
+fn has_voted_extends_the_vote_entry() {
+    let t = setup(&[("tier", "Gold")]);
+    let id = t.propose(&t.marta).unwrap();
+    assert_eq!(t.cast(&t.marta, id, true), Ok(()));
+
+    let key = DataKey::Vote(id, t.marta.clone());
+    let ttl = || {
+        t.e.as_contract(&t.vote.address, || {
+            t.e.storage().persistent().get_ttl(&key)
+        })
+    };
+    assert_eq!(ttl(), TTL_EXTEND_TO, "cast with the full window");
+
+    // Move forward until fewer than the threshold remain; the vote contract
+    // itself stays alive because `vote` extended its instance to the same window.
+    let elapsed = TTL_EXTEND_TO - TTL_THRESHOLD + 1;
+    t.e.ledger().with_mut(|l| l.sequence_number += elapsed);
+    assert!(ttl() < TTL_THRESHOLD);
+
+    assert!(t.vote.has_voted(&id, &t.marta));
+    assert_eq!(ttl(), TTL_EXTEND_TO, "reading it extends it again");
+
+    // Asking about someone who did not vote has nothing to extend.
+    assert!(!t.vote.has_voted(&id, &t.stranger));
 }

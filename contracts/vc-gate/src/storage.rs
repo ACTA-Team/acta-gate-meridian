@@ -4,28 +4,32 @@ use crate::types::{Config, GateRecord};
 
 /// Same TTL policy as `vc-vault` (`constants.rs`): extend to ~180 days once
 /// fewer than ~30 remain.
-const TTL_THRESHOLD: u32 = 518_400;
-const TTL_EXTEND_TO: u32 = 3_110_400;
+pub const TTL_THRESHOLD: u32 = 518_400;
+pub const TTL_EXTEND_TO: u32 = 3_110_400;
 
 #[contracttype]
 #[allow(clippy::large_enum_variant)] // storage keys are host handles, never moved around in bulk
-enum DataKey {
+pub(crate) enum DataKey {
     Config,
     /// `(holder, issuer, credential_type)`. A new registration of the same type replaces it.
     Record(Address, Address, String),
 }
 
-pub fn set_config(e: &Env, config: &Config) {
-    e.storage().instance().set(&DataKey::Config, config);
+/// Every entrypoint calls this: the instance (and with it the config) stays
+/// alive as long as someone registers in or asks the gate.
+pub fn extend_instance(e: &Env) {
     e.storage()
         .instance()
         .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 }
 
+pub fn set_config(e: &Env, config: &Config) {
+    e.storage().instance().set(&DataKey::Config, config);
+    extend_instance(e);
+}
+
 pub fn config(e: &Env) -> Config {
-    e.storage()
-        .instance()
-        .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    extend_instance(e);
     e.storage().instance().get(&DataKey::Config).unwrap()
 }
 

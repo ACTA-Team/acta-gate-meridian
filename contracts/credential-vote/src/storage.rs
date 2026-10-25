@@ -4,11 +4,11 @@ use crate::{Proposal, Requirement};
 
 /// Same TTL policy as `vc-gate` and the vault: extend to ~180 days once fewer
 /// than ~30 remain.
-const TTL_THRESHOLD: u32 = 518_400;
-const TTL_EXTEND_TO: u32 = 3_110_400;
+pub const TTL_THRESHOLD: u32 = 518_400;
+pub const TTL_EXTEND_TO: u32 = 3_110_400;
 
 #[contracttype]
-enum DataKey {
+pub(crate) enum DataKey {
     Requirement,
     NextId,
     Proposal(u32),
@@ -66,8 +66,15 @@ pub fn mark_voted(e: &Env, proposal: u32, voter: &Address) {
         .extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
 }
 
+/// Reading a vote keeps it alive, like reading a proposal does: a vote that
+/// is still being asked about never archives, so `AlreadyVoted` keeps holding.
 pub fn has_voted(e: &Env, proposal: u32, voter: &Address) -> bool {
-    e.storage()
-        .persistent()
-        .has(&DataKey::Vote(proposal, voter.clone()))
+    let key = DataKey::Vote(proposal, voter.clone());
+    let voted = e.storage().persistent().has(&key);
+    if voted {
+        e.storage()
+            .persistent()
+            .extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+    voted
 }

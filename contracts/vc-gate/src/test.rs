@@ -2,12 +2,18 @@ extern crate std;
 
 use soroban_sdk::{
     map,
-    testutils::{Address as _, BytesN as _},
+    testutils::{
+        storage::{Instance, Persistent},
+        Address as _, BytesN as _, Ledger,
+    },
     Address, BytesN, Env, Map, String,
 };
 use vc_vault_factory_contract::{VaultFactoryContract, VaultInitMeta};
 
-use crate::{vault, Error, VcGate, VcGateClient};
+use crate::{
+    storage::{DataKey, TTL_EXTEND_TO, TTL_THRESHOLD},
+    vault, Error, VcGate, VcGateClient,
+};
 
 struct Setup<'a> {
     e: Env,
@@ -117,6 +123,33 @@ impl Setup<'_> {
             &s(&self.e, key),
             &s(&self.e, value),
         )
+    }
+
+    /// Ledgers left on the holder's record and on the gate's instance.
+    fn ttls(&self) -> (u32, u32) {
+        let key = DataKey::Record(self.holder.clone(), self.issuer.clone(), ty(&self.e));
+        self.e.as_contract(&self.gate.address, || {
+            (
+                self.e.storage().persistent().get_ttl(&key),
+                self.e.storage().instance().get_ttl(),
+            )
+        })
+    }
+
+    /// Moves the ledger forward until the gate's entries are below the
+    /// threshold. The vault and the factory are kept alive on purpose: the
+    /// vault already extends its own entries to the same ~180 days on every
+    /// call, and this test is about the gate's.
+    fn age_past_threshold(&self) {
+        let far = TTL_EXTEND_TO * 2;
+        self.e.as_contract(&self.gate.address, || {
+            self.e.deployer().extend_ttl(self.vault.address.clone(), far, far);
+            self.e.deployer().extend_ttl(self.factory.clone(), far, far);
+        });
+        let elapsed = TTL_EXTEND_TO - TTL_THRESHOLD + 1;
+        self.e.ledger().with_mut(|l| l.sequence_number += elapsed);
+        let (record, instance) = self.ttls();
+        assert!(record < TTL_THRESHOLD && instance < TTL_THRESHOLD);
     }
 }
 
@@ -335,4 +368,71 @@ fn both_revocations_reach_check() {
     t.register(&vc_id, &gold(&t.e));
     t.vault.revoke_vault();
     assert!(!t.check(&gold(&t.e)));
+}
+
+#[test]
+fn register_caps_the_vc_id() {
+    let t = setup();
+    let max = t.issue(&t.issuer, &"i".repeat(64));
+    t.register(&max, &gold(&t.e));
+    assert!(t.is_valid());
+
+    // The vault caps ids at the same 64 bytes, so a longer one can never have
+    // been issued: the gate rejects it before asking the vault (not `NotTheIssuer`).
+    let too_long = s(&t.e, &"i".repeat(65));
+    assert_eq!(
+        t.try_register(&t.issuer, &t.vault.address, &too_long),
+        Some(Error::InputTooLong.into())
+    );
+}
+
+#[test]
+fn register_extends_the_record_and_the_instance() {
+    let t = setup();
+    let vc_id = t.issue(&t.issuer, "vc-1");
+    t.register(&vc_id, &gold(&t.e));
+    assert_eq!(t.ttls(), (TTL_EXTEND_TO, TTL_EXTEND_TO));
+}
+
+#[test]
+fn is_valid_extends_the_record_and_the_instance() {
+    let t = setup();
+    let vc_id = t.issue(&t.issuer, "vc-1");
+    t.register(&vc_id, &gold(&t.e));
+    t.age_past_threshold();
+    assert!(t.is_valid());
+    assert_eq!(t.ttls(), (TTL_EXTEND_TO, TTL_EXTEND_TO));
+}
+
+#[test]
+fn has_claim_extends_the_record_and_the_instance() {
+    let t = setup();
+    let vc_id = t.issue(&t.issuer, "vc-1");
+    t.register(&vc_id, &gold(&t.e));
+    t.age_past_threshold();
+    assert!(t.has("tier", "Gold"));
+    assert_eq!(t.ttls(), (TTL_EXTEND_TO, TTL_EXTEND_TO));
+}
+
+#[test]
+fn check_extends_the_record_and_the_instance() {
+    let t = setup();
+    let vc_id = t.issue(&t.issuer, "vc-1");
+    t.register(&vc_id, &gold(&t.e));
+    t.age_past_threshold();
+    assert!(t.check(&gold(&t.e)));
+    assert_eq!(t.ttls(), (TTL_EXTEND_TO, TTL_EXTEND_TO));
+}
+
+#[test]
+fn a_miss_still_extends_the_instance() {
+    // An unknown holder has no record to extend, but the gate itself was asked.
+    let t = setup();
+    let vc_id = t.issue(&t.issuer, "vc-1");
+    t.register(&vc_id, &gold(&t.e));
+    t.age_past_threshold();
+    let nobody = Address::generate(&t.e);
+    assert!(!t.gate.is_valid(&nobody, &t.issuer, &ty(&t.e)));
+    let (_, instance) = t.ttls();
+    assert_eq!(instance, TTL_EXTEND_TO);
 }
