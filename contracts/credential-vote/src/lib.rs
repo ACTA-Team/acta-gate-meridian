@@ -2,7 +2,7 @@
 //! `credential-vote`: a vote that only credentialed addresses can take part
 //! in. The second consumer of `vc-gate`, next to `credential-policy`: a plain
 //! contract, not a smart account, that asks the gate before letting someone
-//! act. Spec: `docs/IDEA ES.md`, section "Contrato: credential-vote".
+//! act. Spec: `docs/IDEA.md`, section "Contract: credential-vote".
 //!
 //! The credential is checked when proposing and when voting, live against
 //! `vc-gate` (which re-reads the vault). A revocation stops new votes; votes
@@ -89,7 +89,7 @@ pub struct Voted {
 #[contractclient(name = "GateClient")]
 trait Gate {
     /// `vc-gate`'s `check`: a valid credential plus every claim matching, in a
-    /// single call (`docs/IMPLEMENTATION ES.md` section 5.4).
+    /// single call (`docs/IMPLEMENTATION.md` section 5.4).
     fn check(
         e: Env,
         holder: Address,

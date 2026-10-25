@@ -1,8 +1,8 @@
 #![no_std]
 //! `credential-policy`: an OpenZeppelin smart-account `Policy` that only lets a
 //! treasury pay addresses holding a valid credential.
-//! Spec: `docs/IDEA ES.md`, section "Contrato: credential-policy", and the three
-//! traps in `docs/IMPLEMENTATION ES.md` section 6.
+//! Spec: `docs/IDEA.md`, section "Contract: credential-policy", and the three
+//! traps in `docs/IMPLEMENTATION.md` section 6.
 
 #[cfg(test)]
 mod test;
@@ -63,7 +63,7 @@ enum DataKey {
 #[contractclient(name = "GateClient")]
 trait Gate {
     /// `vc-gate`'s `check`: a valid credential plus every claim matching, in a
-    /// single call (`docs/IMPLEMENTATION ES.md` section 5.4).
+    /// single call (`docs/IMPLEMENTATION.md` section 5.4).
     fn check(
         e: Env,
         holder: Address,

@@ -5,7 +5,7 @@
  *   tsx scripts/deploy-smart-account.ts treasury   # policies: threshold 1-of-1 + credential-policy
  *   tsx scripts/deploy-smart-account.ts plain      # no policies (a test recipient)
  *
- * The treasury is the configuration from `docs/IMPLEMENTATION ES.md` section 7:
+ * The treasury is the configuration from `docs/IMPLEMENTATION.md` section 7:
  * a single Default rule carrying both policies (trap 2).
  * Reads SPONSOR_SECRET, TREASURY_SIGNER_SECRET, ISSUER_SECRET, VC_GATE_ID,
  * CREDENTIAL_POLICY_ID and REQUIRED_TIER from `.env`.

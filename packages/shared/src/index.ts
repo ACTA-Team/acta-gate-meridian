@@ -30,7 +30,7 @@ export interface NetworkConfig {
   };
 }
 
-/** Source: docs/IMPLEMENTATION ES.md section 4 and docs/deployments/acta-gate-testnet.md. */
+/** Source: docs/IMPLEMENTATION.md section 4 and docs/deployments/acta-gate-testnet.md. */
 export const NETWORKS: Partial<Record<Network, NetworkConfig>> = {
   testnet: {
     rpcUrl: "https://soroban-testnet.stellar.org",

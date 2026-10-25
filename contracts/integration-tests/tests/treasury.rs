@@ -1,4 +1,4 @@
-//! The treasury of `docs/IMPLEMENTATION ES.md` §7, assembled from the real
+//! The treasury of `docs/IMPLEMENTATION.md` §7, assembled from the real
 //! pieces: an OpenZeppelin smart account (`stellar-accounts` 0.7.2) whose only
 //! rule, `Default`, carries `{ threshold 1-of-1, credential-policy }`; the real
 //! `vc-gate`; and Marta's real `vc-vault`, deployed by the real factory.
@@ -16,7 +16,7 @@
 //!
 //! The account contract below is built from the crate's building blocks. The
 //! one on testnet is `smart-account-kit`'s WASM, compiled from a slightly newer
-//! OpenZeppelin commit with the same `Policy` trait (`IMPLEMENTATION ES.md` §4).
+//! OpenZeppelin commit with the same `Policy` trait (`IMPLEMENTATION.md` §4).
 //!
 //! The last section adds the second gate, `credential-vote`, next to the
 //! treasury: one credential opens both, one revocation closes both.

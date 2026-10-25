@@ -1,5 +1,5 @@
 //! The vault's client and types, imported from its WASM so they always match
-//! the real contract (`docs/IMPLEMENTATION ES.md` section 5.1). Build the vault
+//! the real contract (`docs/IMPLEMENTATION.md` section 5.1). Build the vault
 //! WASM first: `cargo build -p vc-vault-contract --target wasm32v1-none --release`.
 
 use soroban_sdk::{contractclient, Address, Env};

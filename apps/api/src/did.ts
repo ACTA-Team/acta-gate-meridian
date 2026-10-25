@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 
 /**
  * `did:stellar` identifiers and Multikey encoding of the holder's passkey, as
- * `docs/did-spec/did-stellar-v0.1.md` §2.3 and `docs/IMPLEMENTATION ES.md` §8
+ * `docs/did-spec/did-stellar-v0.1.md` §2.3 and `docs/IMPLEMENTATION.md` §8
  * describe. Kept dependency-free: both encodings are a few lines.
  */
 

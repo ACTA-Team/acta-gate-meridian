@@ -1,8 +1,8 @@
 #![no_std]
 //! `vc-gate`: lets a contract go from a holder's address to a credential in
 //! their `vc-vault`, plus the public claims a gate needs (e.g. `tier: Gold`).
-//! Spec: `docs/IDEA ES.md`, section "Contrato: vc-gate", and
-//! `docs/IMPLEMENTATION ES.md` section 5.
+//! Spec: `docs/IDEA.md`, section "Contract: vc-gate", and
+//! `docs/IMPLEMENTATION.md` section 5.
 //!
 //! The vault is the source of truth: it records the issuer and both
 //! revocations. `vc-gate` only indexes, and re-checks the vault on every read.
