@@ -14,3 +14,6 @@ soroban-sdk = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+# Tests run against the real factory and vault. Never a normal dependency: a
+# linked contract exports its functions from this WASM.
+vc-vault-factory-contract = { path = "../vc-vault-factory" }
