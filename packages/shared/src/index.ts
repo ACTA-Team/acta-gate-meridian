@@ -23,6 +23,8 @@ export interface NetworkConfig {
     vcGate?: string;
     /** ACTA Gate, deployed at the event. */
     credentialPolicy?: string;
+    /** ACTA Gate, deployed at the event. */
+    credentialVote?: string;
     /** Circle USDC, Stellar Asset Contract. */
     usdc: string;
   };
@@ -46,6 +48,7 @@ export const NETWORKS: Partial<Record<Network, NetworkConfig>> = {
       vcVaultFactory: "CCPEKQVBJP5XK4WLJS3XOVJFH2Q2IQPJK4DAYKUS3NGMCGWMXUJU5TKU",
       vcGate: "CDNCAGEI3OCL5G6NL7UVKYR7Q34UPBGPO4SZB3YKOHCPKU5U33LN5UOD",
       credentialPolicy: "CBNICQYB5VOIWYPS4WF27OAKCKEALW54SYGFETN63UYF6537KCQZEH66",
+      credentialVote: "CAZUHZRKTGYD2DSIQCTKX5KO3HS4FI565D256HFY5YWAJGLD367GBEAN",
       didStellarRegistry: "CCGVBGVF5V4L7N6QNHBZQLZ6LY7W6ZUFR4JCPWCUKATQWUFBX5TS3OWZ",
       usdc: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
     },

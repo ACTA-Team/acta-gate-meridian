@@ -11,6 +11,7 @@ Despliegue del demo, 2026-10-25. Network passphrase: `Test SDF Network ; Septemb
 | `vc-gate` | `CDNCAGEI3OCL5G6NL7UVKYR7Q34UPBGPO4SZB3YKOHCPKU5U33LN5UOD` | `vault_factory` = la factory de arriba |
 | `credential-policy` | `CBNICQYB5VOIWYPS4WF27OAKCKEALW54SYGFETN63UYF6537KCQZEH66` | |
 | `did-stellar-registry` | `CCGVBGVF5V4L7N6QNHBZQLZ6LY7W6ZUFR4JCPWCUKATQWUFBX5TS3OWZ` | Código sin cambios; instancia propia del demo |
+| `credential-vote` | `CAZUHZRKTGYD2DSIQCTKX5KO3HS4FI565D256HFY5YWAJGLD367GBEAN` | `requirement` = gate de arriba, GrantFox, `ContributorBadge`, `[{ tier: Gold }]` |
 
 ## La tesorería
 
