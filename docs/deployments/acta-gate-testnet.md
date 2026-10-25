@@ -11,11 +11,12 @@ Demo deployment, 2026-10-25. Network passphrase: `Test SDF Network ; September 2
 | `vc-gate` | `CDNCAGEI3OCL5G6NL7UVKYR7Q34UPBGPO4SZB3YKOHCPKU5U33LN5UOD` | `vault_factory` = the factory above |
 | `credential-policy` | `CBNICQYB5VOIWYPS4WF27OAKCKEALW54SYGFETN63UYF6537KCQZEH66` | |
 | `did-stellar-registry` | `CCGVBGVF5V4L7N6QNHBZQLZ6LY7W6ZUFR4JCPWCUKATQWUFBX5TS3OWZ` | Unchanged code; the demo's own instance |
-| `credential-vote` | `CAZUHZRKTGYD2DSIQCTKX5KO3HS4FI565D256HFY5YWAJGLD367GBEAN` | `requirement` = the gate above, GrantFox, `ContributorBadge`, `[{ tier: Gold }]` |
+| `credential-vote` | `CBHPFHOBDDDHP2PFVWGSFOI4THVPQF5I5RZMHCSBZ362FYWJYZ4RWNSE` | WASM `a41a51c12d3603bbecb3db63e44eed7a4812eb6df609986ce22118eec1185ea6`. `requirement` = the gate above, GrantFox (`GC7INDGA…EFA6`), `ContributorBadge`, `[{ tier: Gold }]`. [tx](https://stellar.expert/explorer/testnet/tx/8f50d6d8e5c7797d1e6b00dadda272a063ac1924bc9c29271a6f3b6fed7d06dc) |
 
 Verified with on-chain reads on 2026-10-25: `vc-gate.config().vault_factory` is the
-factory in this table, and `credential-vote.requirement()` returns the gate in this table,
-GrantFox (`GDNELPMT…D7ZD`), `ContributorBadge` and `[{ tier: Gold }]`. The IDs are also in
+factory in this table, `credential-vote.requirement()` returns the gate in this table,
+GrantFox (`GC7INDGA…EFA6`), `ContributorBadge` and `[{ tier: Gold }]`, and the treasury's
+`credential-policy.get_requirement(treasury, 0)` returns the same requirement. The IDs are also in
 `packages/shared/src/index.ts` and in `apps/api/.env.example`.
 
 ### Previous deployment (replaced)
@@ -27,22 +28,19 @@ GrantFox (`GDNELPMT…D7ZD`), `ContributorBadge` and `[{ tier: Gold }]`. The IDs
 | `vc-gate` | `CCQLGN7IOR4GSGDLLQ2SALMUWWQ67DGHV7WQUEDZDGTFIX3OIKA5HOU2` |
 | `credential-policy` | `CAI3YAVSWX2GA5SX2KCAMHLOLHVOPZUL2MXQQNSIUFSRY2RBKKOJGIQR` |
 | `did-stellar-registry` 0.3.0 (ACTA's, reused) | `CAJQFHGAJR5Q2NMGM7IYGM2KK6FLQXT634XZMGEYKKOYN2E2ONCFRSQK` |
+| `credential-vote`, trusting the previous GrantFox (`GDNELPMT…D7ZD`), whose key the demo does not have | `CAZUHZRKTGYD2DSIQCTKX5KO3HS4FI565D256HFY5YWAJGLD367GBEAN` |
+| Treasury, with the previous `credential-policy` | `CD724INVERFLPXAULVMTMUUUEKLWF2YIGIJ7MC2J3XBYU35F3IAZ64NP` |
 
 ## The treasury
 
 | | |
 |---|---|
-| Smart account | `CD724INVERFLPXAULVMTMUUUEKLWF2YIGIJ7MC2J3XBYU35F3IAZ64NP` |
+| Smart account | `CCJACTUKEMDSICCWLUFF4GWLD3H2KZRWXUTUC7342JZ7FNDGHMYXYHIJ` ([tx](https://stellar.expert/explorer/testnet/tx/246d3db27d94f84e1d6055b69cfa86a0d2ef4be0d4461d0f454b47c4d55a7d89)) |
 | Rule | One, `Default` (id 0): external Ed25519 signer + policies `{ threshold 1 of 1, credential-policy }` |
-| Requirement | `gate` = `vc-gate`, `issuer` = GrantFox, `ContributorBadge`, `claims: [{ tier: Gold }]` |
-| Funds | 200 Circle testnet USDC when deployed |
+| Requirement | `gate` = `vc-gate`, `issuer` = GrantFox (`GC7INDGA…EFA6`), `ContributorBadge`, `claims: [{ tier: Gold }]` (verified on-chain) |
+| Funds | 200 Circle testnet USDC, bought on the testnet DEX for ~230 XLM ([tx](https://stellar.expert/explorer/testnet/tx/5074a918457e9d160b553fcfd9cbe2c609090c7312b42dffa22a4ec85378aeb0)) |
 
 Deployed with `apps/api/scripts/deploy-smart-account.ts treasury`.
-
-> **To be redone.** The treasury above still has the previous deployment's
-> `credential-policy` installed, pointing at the previous `vc-gate`. The script has to
-> run again with the new addresses so that the `Requirement` points at the gate in this
-> table.
 
 ## The vote (`credential-vote`)
 
@@ -57,7 +55,7 @@ stellar contract deploy \
   --source <ACTA account> --network testnet \
   -- --requirement '{
     "gate": "CDNCAGEI3OCL5G6NL7UVKYR7Q34UPBGPO4SZB3YKOHCPKU5U33LN5UOD",
-    "issuer": "GDNELPMTURNICKCTPK3L5UAEKUSWSYFCDNGBTSFNWJNZNJMI2I7LD7ZD",
+    "issuer": "GC7INDGAMCG522TIOWRH7TPVENROPFROKOXWYAFEFQCAFZNA2U2EEFA6",
     "credential_type": "ContributorBadge",
     "claims": [{ "key": "tier", "value": "Gold" }]
   }'
@@ -71,22 +69,31 @@ signature: the web asks for it with the passkey and the backend pays the fee.
 | Role | Address |
 |---|---|
 | ACTA (vault sponsor, pays fees) | `GDT4CHG5DFMVBW47OUWQJSGFBR5WATL5KSTHBIUAHIK7ZBCY66TICKEG` |
-| GrantFox (issuer) | `GDNELPMTURNICKCTPK3L5UAEKUSWSYFCDNGBTSFNWJNZNJMI2I7LD7ZD` |
+| GrantFox (issuer) | `GC7INDGAMCG522TIOWRH7TPVENROPFROKOXWYAFEFQCAFZNA2U2EEFA6` |
+| GrantFox, previous (its key is not available to the demo) | `GDNELPMTURNICKCTPK3L5UAEKUSWSYFCDNGBTSFNWJNZNJMI2I7LD7ZD` |
 | The treasury's Ed25519 signer | `GDWWCQXC4T5F4BWKDYE3CK5ER3TOUCAB25YFKHQYXQTW6GY5MFHVIF7O` |
 | Deployer of the passkey smart accounts (web) | `GA56DIMBD74DJ6I3EIBYW3T5HGO3XYZ2XVHPYKBSA7RASCZLRR3GVD2N` |
+| Deployer of the passkey smart accounts (web, a second one funded by friendbot on 2026-10-25) | `GC662RXLB3UPX76ITPJGMM4HTQTY6YCCPGYSY5L3CWEGRKIADAJYHWLA` |
+| Sponsor of vaults and DIDs, fee payer (a second one, 2026-10-25) | `GAVCFGDUIOIKK3BH7ECG45M5QZQH46P3CCBLUPAX5MJCFBOFDQSA5VP4` |
+| Ed25519 signer for the new treasury (2026-10-25) | `GAT3IATJNNJD44UVBD32LCUJAHV7MHNIA4H7OSQ2PMSD42D265WAGBR7` |
 
 ## Demo verified on-chain
 
-> **To be redone.** The addresses and the transaction below belong to the previous
-> deployment. The flow has to run again against the contracts in this document.
+On 2026-10-25, through the API, against the contracts in this document. The holder is a
+test smart account with an Ed25519 signer (`deploy-smart-account.ts plain`), so the DID
+step, which needs a passkey, is skipped:
 
-With a test smart account as the holder (`CAD475NI57SKXSFMEYMR67PF5WZD3GUMIWBCQGEG3H2O6CJNZBS5CSO7`):
-
-1. Vault created by ACTA: `CBKNXFBIBLKZ3QC7SUECEFRSNBWFJKCTHR5G7BLXQW35L7MQSADM3MIQ`
-2. GrantFox issues Gold and registers it in `vc-gate` → `is_valid = true`
-3. The treasury pays 5 USDC → [tx](https://stellar.expert/explorer/testnet/tx/a80a0b6707a80da24551186c0bdc4f87feb08710d1d677ca54bab766b59e4b15)
+1. Holder `CD33COZJMLCR7CYXJZIN7UBMO3IZXP6HLE47WTNE7G7UXKABLDCXUFYF`; vault created by ACTA:
+   `CCQ6GYWMRUFVRJRE363YVNXQHOX6IBJUKQHBM5FTEU4K6FMBAIFU43QZ`
+2. GrantFox issues Gold and registers it in `vc-gate` → `is_valid = true`, `can_vote = true`
+   ([tx](https://stellar.expert/explorer/testnet/tx/0b58882e1e8b8bc9c1c7e44caab2c6b592d3416bd850f920a697fe01d7e9599b))
+3. The treasury pays the holder 5 USDC → paid ([tx](https://stellar.expert/explorer/testnet/tx/25d68ea2464686ce0b89f6bfa700fd3807c1daaf7c9b210762f5bef9496b456d))
 4. Payment to an address without a credential → `RecipientNotCredentialed`
-5. GrantFox revokes (`revoke_by_issuer`) → `is_valid = false` → the next payment, `RecipientNotCredentialed`
+5. GrantFox revokes (`revoke_by_issuer`) → `is_valid = false`, `can_vote = false`
+   ([tx](https://stellar.expert/explorer/testnet/tx/b7919b03589f7d4bc06b114810ec139839b9d9fdb766fec1c20def1cd6f94fe0)) → the next payment,
+   `RecipientNotCredentialed`
+
+Not verified yet: proposing and voting, which need a passkey signature from the browser.
 
 ## Costs measured on testnet
 
