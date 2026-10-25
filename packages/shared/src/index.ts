@@ -41,12 +41,12 @@ export const NETWORKS: Partial<Record<Network, NetworkConfig>> = {
       thresholdPolicy: "CB3FATQKCIRIQOCYRUPCQ2KREQ7T4RPKS7EAEOZWPEPUKWEDRVROBCEG",
     },
     contracts: {
-      // Built with the vc-vault 0.5.0 template (docs/deployments/acta-gate-testnet.md).
-      // CB23E4GX… is ACTA's 0.4.0 factory: its vaults do not record the issuer.
-      vcVaultFactory: "CCHI33MJAWFCLHLX6CLFAT32ERHMILF3LCUV4SYKWP3ASIBTPZNRDL3Y",
-      vcGate: "CCQLGN7IOR4GSGDLLQ2SALMUWWQ67DGHV7WQUEDZDGTFIX3OIKA5HOU2",
-      credentialPolicy: "CAI3YAVSWX2GA5SX2KCAMHLOLHVOPZUL2MXQQNSIUFSRY2RBKKOJGIQR",
-      didStellarRegistry: "CAJQFHGAJR5Q2NMGM7IYGM2KK6FLQXT634XZMGEYKKOYN2E2ONCFRSQK",
+      // Deployed for the demo: the factory is built with the vc-vault 0.5.0
+      // template, whose vaults record the issuer (docs/deployments/acta-gate-testnet.md).
+      vcVaultFactory: "CCPEKQVBJP5XK4WLJS3XOVJFH2Q2IQPJK4DAYKUS3NGMCGWMXUJU5TKU",
+      vcGate: "CDNCAGEI3OCL5G6NL7UVKYR7Q34UPBGPO4SZB3YKOHCPKU5U33LN5UOD",
+      credentialPolicy: "CBNICQYB5VOIWYPS4WF27OAKCKEALW54SYGFETN63UYF6537KCQZEH66",
+      didStellarRegistry: "CCGVBGVF5V4L7N6QNHBZQLZ6LY7W6ZUFR4JCPWCUKATQWUFBX5TS3OWZ",
       usdc: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
     },
   },

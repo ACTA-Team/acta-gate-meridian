@@ -84,13 +84,13 @@ stellar-accounts = "0.7.2"        # trait Policy y tipos de OpenZeppelin
 | Template de `vc-vault` 0.5.0 + una `vc-vault-factory` construida con él | El vault cambió; la factory fija el hash del template al construirse |
 | `vc-gate` y `credential-policy` | Son las piezas nuevas |
 
-El `did-stellar-registry` no cambió: se puede reusar el 0.3.0 de testnet.
+El `did-stellar-registry` no cambió de código, pero se despliega una instancia
+propia para el demo en vez de reusar la de ACTA.
 
 ### Lo que se reusa (testnet)
 
 | Pieza | Testnet |
 |---|---|
-| `did-stellar-registry` 0.3.0 (ACTA) | `CAJQFHGAJR5Q2NMGM7IYGM2KK6FLQXT634XZMGEYKKOYN2E2ONCFRSQK` |
 | Smart account (una por wallet) | WASM `1b5f4534a76322da2ad7c745f6900857a6802b0ca79850c35a03561df997785a` |
 | Verificador WebAuthn (passkeys) | `CC7EKIHQP3TN4CARQDND6CEOY2UXLWWC2X5GHTD5NLAT7BG5GPZIOM3F` |
 | Verificador Ed25519 | `CAAVTMCBXEIBPR64EAASKFXERVPYFZA2JYP5A3BG6PESWEFUJX5IHKN4` |
@@ -378,7 +378,7 @@ fn enforce(e: &Env, context: Context, signers: Vec<Signer>, rule: ContextRule, a
 
 | # | Spike | Estado |
 |---|---|---|
-| PA | Desplegar en testnet el template de `vc-vault` 0.5.0 y una `vc-vault-factory` construida con él | **Abierto.** Es lo primero que necesita el demo |
+| PA | Desplegar en testnet el template de `vc-vault` 0.5.0 y una `vc-vault-factory` construida con él | **Resuelto.** Ver `deployments/acta-gate-testnet.md` |
 | PB | `deploy_sponsored` con una smart account del kit como `owner`, y un `transfer` de USDC hacia esa `C…` | **Abierto** |
 | P4 | Wallet con passkey en testnet (`createWallet` + `signAndSubmit` con `deployerSecret`) | **Casi resuelto.** La infraestructura está desplegada |
 | P8 | Instalar `credential-policy` en la regla `Default` de una wallet del kit y pagar a través de ella, incluido vía `execute` | **Abierto.** Valida las tres trampas |

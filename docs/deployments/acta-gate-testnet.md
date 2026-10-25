@@ -6,10 +6,11 @@ Despliegue del demo, 2026-10-25. Network passphrase: `Test SDF Network ; Septemb
 
 | Contrato | ID / hash | Notas |
 |---|---|---|
-| `vc-vault` 0.5.0 (template) | WASM `7c5f8b1c5194d72281f4e6c79c8a93fd090fb236e330291f2dcfc816049855b4` | Guarda `issuer` y tiene `revoke_by_issuer` |
-| `vc-vault-factory` | `CCHI33MJAWFCLHLX6CLFAT32ERHMILF3LCUV4SYKWP3ASIBTPZNRDL3Y` | Construida con el template 0.5.0. Comisiones desactivadas |
-| `vc-gate` | `CCQLGN7IOR4GSGDLLQ2SALMUWWQ67DGHV7WQUEDZDGTFIX3OIKA5HOU2` | `vault_factory` = la factory de arriba |
-| `credential-policy` | `CAI3YAVSWX2GA5SX2KCAMHLOLHVOPZUL2MXQQNSIUFSRY2RBKKOJGIQR` | |
+| `vc-vault` 0.5.0 (template) | WASM `856ec0922edba82196f6d9145ddb95a0fb972ffb18153b2e562a36658c02f0f1` | Guarda `issuer` y tiene `revoke_by_issuer` |
+| `vc-vault-factory` | `CCPEKQVBJP5XK4WLJS3XOVJFH2Q2IQPJK4DAYKUS3NGMCGWMXUJU5TKU` | Construida con el template 0.5.0. Comisiones desactivadas |
+| `vc-gate` | `CDNCAGEI3OCL5G6NL7UVKYR7Q34UPBGPO4SZB3YKOHCPKU5U33LN5UOD` | `vault_factory` = la factory de arriba |
+| `credential-policy` | `CBNICQYB5VOIWYPS4WF27OAKCKEALW54SYGFETN63UYF6537KCQZEH66` | |
+| `did-stellar-registry` | `CCGVBGVF5V4L7N6QNHBZQLZ6LY7W6ZUFR4JCPWCUKATQWUFBX5TS3OWZ` | Código sin cambios; instancia propia del demo |
 
 ## La tesorería
 
@@ -22,6 +23,11 @@ Despliegue del demo, 2026-10-25. Network passphrase: `Test SDF Network ; Septemb
 
 Se despliega con `apps/api/scripts/deploy-smart-account.ts treasury`.
 
+> **Pendiente de rehacer.** La tesorería de arriba todavía tiene instalada la
+> `credential-policy` del despliegue anterior, apuntando al `vc-gate` anterior.
+> Hay que volver a correr el script con las direcciones nuevas para que el
+> `Requirement` apunte al gate de esta tabla.
+
 ## Cuentas (solo direcciones públicas)
 
 | Rol | Dirección |
@@ -32,6 +38,10 @@ Se despliega con `apps/api/scripts/deploy-smart-account.ts treasury`.
 | Deployer de las smart accounts con passkey (web) | `GA56DIMBD74DJ6I3EIBYW3T5HGO3XYZ2XVHPYKBSA7RASCZLRR3GVD2N` |
 
 ## Demo verificado on-chain
+
+> **Pendiente de rehacer.** Las direcciones y la transacción de abajo son del
+> despliegue anterior. Hay que volver a correr el flujo contra los contratos de
+> este documento.
 
 Con una smart account de prueba como titular (`CAD475NI57SKXSFMEYMR67PF5WZD3GUMIWBCQGEG3H2O6CJNZBS5CSO7`):
 
