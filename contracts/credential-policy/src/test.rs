@@ -200,7 +200,10 @@ impl Setup<'_> {
         self.e.as_contract(&self.gate.address, || {
             let far = TTL_EXTEND_TO * 2;
             self.e.storage().instance().extend_ttl(far, far);
-            self.e.storage().persistent().extend_ttl(&self.marta, far, far);
+            self.e
+                .storage()
+                .persistent()
+                .extend_ttl(&self.marta, far, far);
         });
         let elapsed = TTL_EXTEND_TO - TTL_THRESHOLD + 1;
         self.e.ledger().with_mut(|l| l.sequence_number += elapsed);
@@ -341,7 +344,11 @@ fn uninstall_twice_fails() {
 #[test]
 fn install_rejects_a_requirement_with_a_duplicate_claim_key() {
     let t = setup_uninstalled();
-    let req = requirement(&t.e, &t.gate.address, &[("tier", "Gold"), ("tier", "Silver")]);
+    let req = requirement(
+        &t.e,
+        &t.gate.address,
+        &[("tier", "Gold"), ("tier", "Silver")],
+    );
     assert_eq!(
         t.policy.try_install(&req, &t.rule, &t.account),
         Err(Ok(Error::MalformedRequirement.into()))
@@ -354,7 +361,11 @@ fn enforce_still_fails_closed_on_a_duplicate_claim_key() {
     // `install` rejects it; if the entry got there some other way, a payment
     // never goes through on half a requirement.
     let t = setup_uninstalled();
-    let req = requirement(&t.e, &t.gate.address, &[("tier", "Gold"), ("tier", "Silver")]);
+    let req = requirement(
+        &t.e,
+        &t.gate.address,
+        &[("tier", "Gold"), ("tier", "Silver")],
+    );
     let key = DataKey::Requirement(t.account.clone(), t.rule.id);
     t.e.as_contract(&t.policy.address, || {
         t.e.storage().persistent().set(&key, &req);

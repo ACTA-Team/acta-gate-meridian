@@ -143,7 +143,9 @@ impl Setup<'_> {
     fn age_past_threshold(&self) {
         let far = TTL_EXTEND_TO * 2;
         self.e.as_contract(&self.gate.address, || {
-            self.e.deployer().extend_ttl(self.vault.address.clone(), far, far);
+            self.e
+                .deployer()
+                .extend_ttl(self.vault.address.clone(), far, far);
             self.e.deployer().extend_ttl(self.factory.clone(), far, far);
         });
         let elapsed = TTL_EXTEND_TO - TTL_THRESHOLD + 1;

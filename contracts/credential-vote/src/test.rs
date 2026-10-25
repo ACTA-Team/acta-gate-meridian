@@ -259,9 +259,7 @@ fn has_voted_extends_the_vote_entry() {
 
     let key = DataKey::Vote(id, t.marta.clone());
     let ttl = || {
-        t.e.as_contract(&t.vote.address, || {
-            t.e.storage().persistent().get_ttl(&key)
-        })
+        t.e.as_contract(&t.vote.address, || t.e.storage().persistent().get_ttl(&key))
     };
     assert_eq!(ttl(), TTL_EXTEND_TO, "cast with the full window");
 
