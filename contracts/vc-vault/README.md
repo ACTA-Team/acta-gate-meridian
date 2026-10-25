@@ -2,7 +2,9 @@
 
 Soroban smart contract implementing a **single-tenant Verifiable Credential vault** on Stellar. Each holder gets their **own** vault instance (one contract per identity), deployed by [`vc-vault-factory`](../vc-vault-factory/README.md). A vault stores credentials, tracks their issuance status, and handles revocation and cross-vault migration.
 
-> `verify_vc` returns the on-chain **status** of a credential (Valid / Revoked / Invalid). It is a revocation signal only, **not** proof of authenticity - because issuance is open, integrators MUST verify the issuer's signature and resolve the issuer DID off-chain before trusting a credential.
+> `verify_vc` returns the on-chain **status** of a credential (Valid / Revoked / Invalid). It is a revocation signal only, **not** proof of authenticity: issuance is open, so anyone can deposit a credential into a vault. To know who issued it, read `get_vc(id).issuer`, the address that authorized the issuance. `issuer_did` is only declared by the caller.
+>
+> **Modified for ACTA Gate (0.5.0):** the vault now records the issuer address, lets the issuer revoke (`revoke_by_issuer`), and exposes `is_revoked`.
 
 ---
 
@@ -32,6 +34,7 @@ A vault is normally deployed by the factory, which calls the constructor below. 
 | `set_vault_did(did_uri)` | `vault_owner` | Update the vault's DID URI (≤ 256 bytes). Emits `VaultDidChanged`. |
 | `vault_did()` | none | Returns the vault's DID URI, or `None`. |
 | `vault_owner()` | none | Returns the vault owner address. |
+| `is_revoked()` | none | Whether `revoke_vault` was called. `verify_vc` does not look at this flag. |
 | `deny_issuer(issuer_addr)` | vault admin | Add an issuer to the denylist. Denied issuers cannot `issue`. No-op if already present. |
 | `allow_issuer(issuer_addr)` | vault admin | Remove an issuer from the denylist. No-op if absent. |
 | `revoke_vault()` | vault admin | Permanently lock the vault against all writes. Irreversible. |
@@ -42,11 +45,12 @@ A vault is normally deployed by the factory, which calls the constructor below. 
 
 | Function | Auth | Description |
 |---|---|---|
-| `issue(vc_id, vc_data, vault_contract, issuer_addr, issuer_did) -> vc_id` | `issuer_addr` | Store a VC. `vault_contract` must equal this contract's address. Fails if the issuer is denied (`IssuerDenied`), the vault is revoked, or `vc_id` already exists. Charges the factory-quoted fee. |
+| `issue(vc_id, vc_data, vault_contract, issuer_addr, issuer_did) -> vc_id` | `issuer_addr` | Store a VC. `vault_contract` must equal this contract's address. Fails if the issuer is denied (`IssuerDenied`), the vault is revoked, or `vc_id` already exists. Charges the factory-quoted fee. Records `issuer_addr` as the credential's `issuer`. |
 | `batch_issue(issuer_addr, vault_contract, issuer_did, vcs) -> Vec<vc_id>` | `issuer_addr` | Issue 1–`MAX_BATCH_SIZE` (5) VCs atomically. `vcs` is a list of `(vc_id, vc_data)`. One fee transfer covers the batch (`unit × n`). |
-| `revoke(vc_id, date)` | `vault_owner` | Revoke a `Valid` VC. `date` is an ISO-8601 timestamp recorded on-chain. |
+| `revoke(vc_id, date)` | `vault_owner` | The holder revokes a `Valid` VC. `date` is an ISO-8601 timestamp recorded on-chain. |
+| `revoke_by_issuer(vc_id, date)` | the VC's `issuer` | The issuer revokes a `Valid` VC it issued. Works on a revoked vault too: revocation is never blocked. |
 | `push(vc_id, dest_vault)` | vault admin | Migrate a `Valid` VC to `dest_vault` (same owner only). Invokes `receive_push` on the destination. Emits `VCPushed`. |
-| `receive_push(source_vault, source_owner, vc_id, vc_data, issuer_did)` | `source_vault` | Callback target of `push`. Verifies `source_vault` is a real vault (factory `is_vault`) and that `source_owner` matches this vault's owner (`PushOwnerMismatch`). |
+| `receive_push(source_vault, source_owner, vc_id, vc_data, issuer_did, issuer)` | `source_vault` | Callback target of `push`. Verifies `source_vault` is a real vault (factory `is_vault`) and that `source_owner` matches this vault's owner (`PushOwnerMismatch`). |
 | `verify_vc(vc_id) -> VCStatus` | none | On-chain status: `Valid` / `Revoked(date)` / `Invalid`. |
 | `get_vc(vc_id) -> Option<VerifiableCredential>` | none | Returns the VC payload, or `None`. |
 | `list_vc_ids(offset, limit) -> Vec<String>` | none | Paginated list of active VC IDs. `limit` ≤ 200. |
@@ -61,7 +65,7 @@ A vault is normally deployed by the factory, which calls the constructor below. 
 | `contract_admin` | protocol administrator | Nominate a successor admin (two-step). No upgrade, no fee config. |
 | vault admin | per-vault admin (starts as `vault_owner`) | `set_vault_admin`, `deny_issuer`, `allow_issuer`, `revoke_vault`, `push` |
 | `vault_owner` | the holder | `set_vault_did`, `revoke` (a credential) |
-| issuer | any address not on the denylist | `issue`, `batch_issue` |
+| issuer | any address not on the denylist | `issue`, `batch_issue`; `revoke_by_issuer` (only for credentials it issued) |
 
 Authorization is enforced via `require_auth()` on every privileged operation. Read-only functions require no signature.
 
@@ -110,6 +114,7 @@ All state-changing operations emit a typed `#[contractevent]`.
 | `VaultRevoked` | - | `revoke_vault` |
 | `VCIssued` | `vc_id`, `issuer` | `issue`, `batch_issue`, `receive_push` |
 | `VCRevoked` | `vc_id`, `date` | `revoke` |
+| `VCRevokedByIssuer` | `vc_id`, `issuer`, `date` | `revoke_by_issuer` |
 | `VCPushed` | `vc_id`, `dest_vault` | `push` |
 
 ---
@@ -121,7 +126,8 @@ pub struct VerifiableCredential {
     pub id: String,
     pub data: String,          // ciphertext only - never store plaintext PII
     pub issuance_contract: Address,
-    pub issuer_did: String,
+    pub issuer_did: String,    // declared by the caller
+    pub issuer: Address,       // proven: the address that authorized the issuance
 }
 
 pub enum VCStatus {

@@ -17,4 +17,8 @@ pub struct VerifiableCredential {
 
     /// Issuer DID (metadata for wallets/UX).
     pub issuer_did: String,
+
+    /// Address that authorized the issuance (`issuer_addr.require_auth()`).
+    /// Unlike `issuer_did`, it is proven, not declared. Preserved across `push`.
+    pub issuer: Address,
 }

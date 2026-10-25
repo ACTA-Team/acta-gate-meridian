@@ -1048,3 +1048,151 @@ fn test_vault_full_at_u32_max() {
         &String::from_str(&env, "did:issuer"),
     );
 }
+
+// --- Issuer recorded on-chain, and issuer revocation (ACTA Gate) ---
+
+fn issue_one(
+    env: &Env,
+    client: &VcVaultContractClient,
+    contract_id: &Address,
+    issuer: &Address,
+    id: &str,
+) -> String {
+    let vc_id = String::from_str(env, id);
+    client.issue(
+        &vc_id,
+        &String::from_str(env, "<ciphertext>"),
+        contract_id,
+        issuer,
+        &String::from_str(env, "did:issuer"),
+    );
+    vc_id
+}
+
+#[test]
+fn test_issue_records_the_issuer() {
+    let (env, _owner, _admin, issuer, _factory, contract_id, client) = setup();
+    let vc_id = issue_one(&env, &client, &contract_id, &issuer, "vc-1");
+    assert_eq!(client.get_vc(&vc_id).unwrap().issuer, issuer);
+}
+
+#[test]
+fn test_batch_issue_records_the_issuer() {
+    let (env, _owner, _admin, issuer, _factory, contract_id, client) = setup();
+    let vcs = vec![
+        &env,
+        (
+            String::from_str(&env, "b-1"),
+            String::from_str(&env, "<c1>"),
+        ),
+        (
+            String::from_str(&env, "b-2"),
+            String::from_str(&env, "<c2>"),
+        ),
+    ];
+    client.batch_issue(
+        &issuer,
+        &contract_id,
+        &String::from_str(&env, "did:issuer"),
+        &vcs,
+    );
+    for id in ["b-1", "b-2"] {
+        let vc = client.get_vc(&String::from_str(&env, id)).unwrap();
+        assert_eq!(vc.issuer, issuer);
+    }
+}
+
+#[test]
+fn test_revoke_by_issuer_revokes_with_the_issuer_auth_only() {
+    let (env, _owner, _admin, issuer, _factory, contract_id, client) = setup();
+    let vc_id = issue_one(&env, &client, &contract_id, &issuer, "vc-1");
+    let date = String::from_str(&env, "2026-10-25T00:00:00Z");
+    client.revoke_by_issuer(&vc_id, &date);
+    // Exactly one authorization was required, and it was the issuer's.
+    let auths = env.auths();
+    assert_eq!(auths.len(), 1);
+    assert_eq!(auths[0].0, issuer);
+    assert_eq!(client.verify_vc(&vc_id), VCStatus::Revoked(date));
+}
+
+#[test]
+fn test_revoke_by_issuer_emits_vc_revoked_by_issuer() {
+    use crate::events::VCRevokedByIssuer;
+    use soroban_sdk::Event as SorobanEvent;
+    let (env, _owner, _admin, issuer, _factory, contract_id, client) = setup();
+    let vc_id = issue_one(&env, &client, &contract_id, &issuer, "vc-1");
+    let date = String::from_str(&env, "2026-10-25T00:00:00Z");
+    client.revoke_by_issuer(&vc_id, &date);
+    let expected = VCRevokedByIssuer {
+        vc_id: vc_id.clone(),
+        issuer: issuer.clone(),
+        date: date.clone(),
+    };
+    assert_eq!(env.events().all(), [expected.to_xdr(&env, &contract_id)]);
+}
+
+#[test]
+fn test_owner_cannot_revoke_as_issuer() {
+    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+    use soroban_sdk::IntoVal;
+    let (env, owner, _admin, issuer, _factory, contract_id, client) = setup();
+    let vc_id = issue_one(&env, &client, &contract_id, &issuer, "vc-1");
+    let date = String::from_str(&env, "2026-10-25T00:00:00Z");
+    // Only the owner signs; the issuer's auth is missing.
+    let result = client
+        .mock_auths(&[MockAuth {
+            address: &owner,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "revoke_by_issuer",
+                args: (vc_id.clone(), date.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }])
+        .try_revoke_by_issuer(&vc_id, &date);
+    assert!(result.is_err());
+    assert_eq!(client.verify_vc(&vc_id), VCStatus::Valid);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #6)")] // VCNotFound
+fn test_revoke_by_issuer_unknown_vc_panics() {
+    let (env, _owner, _admin, _issuer, _factory, _contract_id, client) = setup();
+    client.revoke_by_issuer(
+        &String::from_str(&env, "nope"),
+        &String::from_str(&env, "2026-10-25T00:00:00Z"),
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #6)")] // VCNotFound
+fn test_revoke_by_issuer_twice_panics() {
+    let (env, _owner, _admin, issuer, _factory, contract_id, client) = setup();
+    let vc_id = issue_one(&env, &client, &contract_id, &issuer, "vc-1");
+    let date = String::from_str(&env, "2026-10-25T00:00:00Z");
+    client.revoke_by_issuer(&vc_id, &date);
+    client.revoke_by_issuer(&vc_id, &date);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #6)")] // VCNotFound
+fn test_revoke_by_issuer_after_holder_revoke_panics() {
+    let (env, _owner, _admin, issuer, _factory, contract_id, client) = setup();
+    let vc_id = issue_one(&env, &client, &contract_id, &issuer, "vc-1");
+    let date = String::from_str(&env, "2026-10-25T00:00:00Z");
+    client.revoke(&vc_id, &date);
+    client.revoke_by_issuer(&vc_id, &date);
+}
+
+#[test]
+fn test_is_revoked_and_issuer_can_still_revoke_in_a_revoked_vault() {
+    let (env, _owner, _admin, issuer, _factory, contract_id, client) = setup();
+    let vc_id = issue_one(&env, &client, &contract_id, &issuer, "vc-1");
+    assert!(!client.is_revoked());
+    client.revoke_vault();
+    assert!(client.is_revoked());
+    // verify_vc does not look at the vault flag, so revocation must stay possible.
+    let date = String::from_str(&env, "2026-10-25T00:00:00Z");
+    client.revoke_by_issuer(&vc_id, &date);
+    assert_eq!(client.verify_vc(&vc_id), VCStatus::Revoked(date));
+}

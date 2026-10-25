@@ -352,6 +352,30 @@ fn test_push_transfers_vc_between_vaults() {
 }
 
 #[test]
+fn test_push_preserves_the_issuer() {
+    let e = Env::default();
+    let (_admin, _factory_id, client) = setup(&e);
+    let owner = Address::generate(&e);
+    let did_uri = String::from_str(&e, "did:test");
+    let vault_a = client.deploy(&owner, &did_uri, &BytesN::random(&e));
+    let vault_b = client.deploy(&owner, &did_uri, &BytesN::random(&e));
+    let a = vc_vault::Client::new(&e, &vault_a);
+    let b = vc_vault::Client::new(&e, &vault_b);
+
+    let issuer = Address::generate(&e);
+    let vc_id = String::from_str(&e, "vc-1");
+    a.issue(
+        &vc_id,
+        &String::from_str(&e, "<data>"),
+        &vault_a,
+        &issuer,
+        &String::from_str(&e, "did:issuer"),
+    );
+    a.push(&vc_id, &vault_b);
+    assert_eq!(b.get_vc(&vc_id).unwrap().issuer, issuer);
+}
+
+#[test]
 fn test_push_removes_vc_from_source() {
     let e = Env::default();
     let (_admin, _factory_id, client) = setup(&e);
@@ -426,6 +450,7 @@ fn test_receive_push_from_non_vault_panics() {
         &String::from_str(&e, "vc-1"),
         &String::from_str(&e, "<data>"),
         &String::from_str(&e, "did:issuer"),
+        &Address::generate(&e),
     );
 }
 

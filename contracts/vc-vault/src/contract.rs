@@ -104,6 +104,11 @@ impl VcVaultTrait for VcVaultContract {
         storage::read_vault_owner(&e)
     }
 
+    fn is_revoked(e: Env) -> bool {
+        storage::extend_vault_ttl(&e);
+        storage::read_vault_revoked(&e)
+    }
+
     fn deny_issuer(e: Env, issuer_addr: Address) {
         require_vault_admin(&e);
         require_vault_active(&e);
@@ -219,7 +224,14 @@ impl VcVaultTrait for VcVaultContract {
         let factory = storage::read_factory_address(&e);
         vault::charge_fee(&e, &factory, &issuer_addr);
 
-        vault::store_vc(&e, vc_id.clone(), vc_data, this.clone(), issuer_did);
+        vault::store_vc(
+            &e,
+            vc_id.clone(),
+            vc_data,
+            this.clone(),
+            issuer_did,
+            issuer_addr.clone(),
+        );
         storage::write_vc_status(&e, &vc_id, &VCStatus::Valid);
         storage::extend_vault_ttl(&e);
         storage::extend_vc_ttl(&e, &vc_id);
@@ -275,7 +287,14 @@ impl VcVaultTrait for VcVaultContract {
             {
                 panic_with_error!(e, ContractError::VCAlreadyExists);
             }
-            vault::store_vc(&e, vc_id.clone(), vc_data, this.clone(), issuer_did.clone());
+            vault::store_vc(
+                &e,
+                vc_id.clone(),
+                vc_data,
+                this.clone(),
+                issuer_did.clone(),
+                issuer_addr.clone(),
+            );
             storage::write_vc_status(&e, &vc_id, &VCStatus::Valid);
             storage::extend_vc_ttl(&e, &vc_id);
             events::vc_issued(&e, &vc_id, &issuer_addr);
@@ -300,6 +319,26 @@ impl VcVaultTrait for VcVaultContract {
         storage::extend_vault_ttl(&e);
         storage::extend_vc_status_ttl(&e, &vc_id);
         events::vc_revoked(&e, &vc_id, &date);
+    }
+
+    fn revoke_by_issuer(e: Env, vc_id: String, date: String) {
+        require_vc_id_len(&e, &vc_id);
+        require_date_len(&e, &date);
+        let vc = match storage::read_vault_vc(&e, &vc_id) {
+            Some(v) => v,
+            None => panic_with_error!(e, ContractError::VCNotFound),
+        };
+        if storage::read_vc_status(&e, &vc_id) != VCStatus::Valid {
+            panic_with_error!(e, ContractError::VCNotFound);
+        }
+        // Only the address that issued it. Works even on a revoked vault:
+        // revocation must never be blocked.
+        vc.issuer.require_auth();
+        vault::revoke_vc(&e, vc_id.clone(), date.clone());
+        storage::remove_vc_from_index(&e, &vc_id);
+        storage::extend_vault_ttl(&e);
+        storage::extend_vc_status_ttl(&e, &vc_id);
+        events::vc_revoked_by_issuer(&e, &vc_id, &vc.issuer, &date);
     }
 
     fn push(e: Env, vc_id: String, dest_vault: Address) {
@@ -328,6 +367,7 @@ impl VcVaultTrait for VcVaultContract {
                 vc_id.clone(),
                 vc.data,
                 vc.issuer_did,
+                vc.issuer,
             )
                 .into_val(&e),
         );
@@ -345,6 +385,7 @@ impl VcVaultTrait for VcVaultContract {
         vc_id: String,
         vc_data: String,
         issuer_did: String,
+        issuer: Address,
     ) {
         require_vc_id_len(&e, &vc_id);
         require_vc_data_len(&e, &vc_data);
@@ -379,7 +420,7 @@ impl VcVaultTrait for VcVaultContract {
             panic_with_error!(e, ContractError::VCAlreadyExists);
         }
         let dest = e.current_contract_address();
-        vault::store_vc(&e, vc_id.clone(), vc_data, dest.clone(), issuer_did);
+        vault::store_vc(&e, vc_id.clone(), vc_data, dest.clone(), issuer_did, issuer);
         storage::write_vc_status(&e, &vc_id, &VCStatus::Valid);
         storage::extend_vault_ttl(&e);
         storage::extend_vc_ttl(&e, &vc_id);

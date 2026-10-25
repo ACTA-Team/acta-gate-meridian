@@ -51,6 +51,13 @@ pub struct VCRevoked {
 }
 
 #[contractevent]
+pub struct VCRevokedByIssuer {
+    pub vc_id: String,
+    pub issuer: Address,
+    pub date: String,
+}
+
+#[contractevent]
 pub struct VCPushed {
     pub vc_id: String,
     pub dest_vault: Address,
@@ -129,6 +136,15 @@ pub fn vc_issued(e: &Env, vc_id: &String, issuer: &Address) {
 pub fn vc_revoked(e: &Env, vc_id: &String, date: &String) {
     VCRevoked {
         vc_id: vc_id.clone(),
+        date: date.clone(),
+    }
+    .publish(e);
+}
+
+pub fn vc_revoked_by_issuer(e: &Env, vc_id: &String, issuer: &Address, date: &String) {
+    VCRevokedByIssuer {
+        vc_id: vc_id.clone(),
+        issuer: issuer.clone(),
         date: date.clone(),
     }
     .publish(e);

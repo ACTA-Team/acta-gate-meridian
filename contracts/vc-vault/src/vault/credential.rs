@@ -5,12 +5,20 @@ use crate::storage;
 use crate::types::{FeeQuote, VCStatus, VerifiableCredential};
 use soroban_sdk::{panic_with_error, symbol_short, Address, Env, IntoVal, String};
 
-pub fn store_vc(e: &Env, id: String, data: String, issuance_contract: Address, issuer_did: String) {
+pub fn store_vc(
+    e: &Env,
+    id: String,
+    data: String,
+    issuance_contract: Address,
+    issuer_did: String,
+    issuer: Address,
+) {
     let new_vc = VerifiableCredential {
         id: id.clone(),
         data,
         issuance_contract,
         issuer_did,
+        issuer,
     };
     storage::write_vault_vc(e, &id, &new_vc);
     storage::append_vc_to_index(e, &id);
