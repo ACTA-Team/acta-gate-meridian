@@ -20,7 +20,7 @@ export async function createHolderWallet(
 ): Promise<{ address: string; txHash: string | null }> {
   // Without it smart-account-kit falls back to its shared, sign-only deployer and refuses to deploy.
   if (!process.env.NEXT_PUBLIC_DEPLOYER_SECRET) throw new Error(m.missingDeployer);
-  const kit = await holderKit();
+  const { kit } = await holderKit();
   const { contractId, submitResult } = await kit.createWallet("ACTA Gate", userName, {
     autoSubmit: true,
     forceMethod: "rpc",
@@ -42,11 +42,8 @@ export async function signHolderAuth(
   m: Messages["wallet"],
 ): Promise<string> {
   const { xdr } = await import("@stellar/stellar-sdk");
-  const kit = await holderKit();
-  // The passkey created in this browser is in IndexedDB: connecting is silent.
-  const connected =
-    (await kit.connectWallet({ contractId: address })) ??
-    (await kit.connectWallet({ prompt: true }));
+  const { kit, storage } = await holderKit();
+  const connected = await connectHolder(kit, storage, address);
   if (connected?.contractId !== address) {
     throw new Error(m.notController);
   }
@@ -55,10 +52,31 @@ export async function signHolderAuth(
   return signed.toXDR("base64");
 }
 
+type HolderKit = Awaited<ReturnType<typeof holderKit>>;
+
+/**
+ * Connects to the holder's smart account. `connectWallet({ contractId })`
+ * alone fails without a credential id, so: the saved session first, then the
+ * passkey this browser created for that account (IndexedDB), and only then
+ * the browser's passkey picker.
+ */
+async function connectHolder(
+  kit: HolderKit["kit"],
+  storage: HolderKit["storage"],
+  address: string,
+) {
+  const session = await kit.connectWallet();
+  if (session?.contractId === address) return session;
+  const [stored] = await storage.getByContract(address);
+  if (stored) return kit.connectWallet({ credentialId: stored.credentialId, contractId: address });
+  return kit.connectWallet({ fresh: true });
+}
+
 async function holderKit() {
   const { SmartAccountKit, IndexedDBStorage } = await import("smart-account-kit");
   const network = getNetworkConfig("testnet");
-  return new SmartAccountKit({
+  const storage = new IndexedDBStorage();
+  const kit = new SmartAccountKit({
     rpcUrl: network.rpcUrl,
     networkPassphrase: network.networkPassphrase,
     accountWasmHash: network.smartAccounts.accountWasmHash,
@@ -66,6 +84,7 @@ async function holderKit() {
     // Testnet only: this key ships to the browser (see the doc, step 1).
     deployerSecret: process.env.NEXT_PUBLIC_DEPLOYER_SECRET,
     rpName: "ACTA Gate",
-    storage: new IndexedDBStorage(),
+    storage,
   });
+  return { kit, storage };
 }
