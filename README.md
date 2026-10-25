@@ -65,7 +65,8 @@ El backend tiene dos modos (`GATE_MODE` en `apps/api/.env`):
 
 | Endpoint | Paso |
 |---|---|
-| `POST /holders { address }` | 1. ACTA crea el vault de Marta (`deploy_sponsored`) |
+| `POST /dids { address }` | 1a. ACTA registra el `did:stellar` de Marta con su passkey como llave (`register_sponsored`) |
+| `POST /holders { address }` | 1b. ACTA crea el vault de Marta, vinculado a su DID (`deploy_sponsored`) |
 | `POST /credentials { address, tier }` | 2. GrantFox emite (`issue`) y registra en `vc-gate` |
 | `POST /payments { to, amount }` | 3 y 4. La tesorería paga; `credential-policy` decide |
 | `POST /credentials/revoke { address }` | 5. GrantFox revoca en el vault (`revoke_by_issuer`) |

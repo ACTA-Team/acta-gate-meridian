@@ -215,6 +215,11 @@ export function useDemo() {
             },
           },
           {
+            label: "ACTA crea tu cédula",
+            detail: "register_sponsored · did:stellar con tu passkey como llave",
+            run: async () => (await api.registerDid(wallet)).txHash,
+          },
+          {
             label: "ACTA crea tu vault",
             detail: "deploy_sponsored · Marta no firma ni paga",
             run: async () => {
@@ -229,7 +234,7 @@ export function useDemo() {
           return {
             tone: "success",
             title: "Wallet lista",
-            detail: "Tu smart account y tu vault ya están en Stellar.",
+            detail: "Tu smart account, tu did:stellar y tu vault ya están en Stellar.",
           };
         },
       );

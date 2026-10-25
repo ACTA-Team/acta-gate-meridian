@@ -18,7 +18,8 @@ import type { Config } from "./config.js";
 import { HttpError } from "./errors.js";
 
 interface HolderState {
-  vault: string;
+  did: string | null;
+  vault: string | null;
   credential: { vcId: string; tier: Tier; issuedAt: string; revokedAt: string | null } | null;
 }
 
@@ -60,14 +61,44 @@ export class Demo {
     };
   }
 
-  /** Step 1: ACTA creates the holder's vault. The holder signs nothing. */
+  /**
+   * Step 1a: ACTA registers the holder's `did:stellar`, with the passkey of
+   * their smart account as its key. The holder signs nothing.
+   */
+  async registerDid(address: string): Promise<ActionResult> {
+    let txHash: string | null = null;
+    const known = await this.load(address);
+    if (!known?.did) {
+      const registered = await this.chain.registerDid(address);
+      txHash = registered.txHash;
+      this.holders.set(address, {
+        did: registered.did,
+        vault: known?.vault ?? null,
+        credential: known?.credential ?? null,
+      });
+      this.log(
+        "did_registered",
+        "Cédula creada",
+        `ACTA registró ${registered.did} para ${short(address)}`,
+        address,
+        txHash,
+      );
+    }
+    return { holder: await this.view(address), txHash };
+  }
+
+  /** Step 1b: ACTA creates the holder's vault, bound to their DID if they have one. */
   async createHolder(address: string): Promise<ActionResult> {
     let txHash: string | null = null;
-    if (!(await this.load(address))) {
-      const deployed = await this.chain.deployVault(address);
-      const vault = deployed.vault;
+    const known = await this.load(address);
+    if (!known?.vault) {
+      const deployed = await this.chain.deployVault(address, known?.did ?? "");
       txHash = deployed.txHash;
-      this.holders.set(address, { vault, credential: null });
+      this.holders.set(address, {
+        did: known?.did ?? null,
+        vault: deployed.vault,
+        credential: null,
+      });
       this.log(
         "vault_deployed",
         "Vault creado",
@@ -90,7 +121,8 @@ export class Demo {
       type: ["VerifiableCredential", CREDENTIAL_TYPE],
       issuer: this.chain.issuerAddress,
       validFrom: issuedAt,
-      credentialSubject: { id: address, tier },
+      // The subject is the holder's DID when they have one, as a VC expects.
+      credentialSubject: { id: holder.did ?? address, tier },
     });
 
     const issued = await this.chain.issue(holder.vault, vcId, vcData);
@@ -182,6 +214,7 @@ export class Demo {
 
     return {
       address,
+      did: holder?.did ?? null,
       vault,
       credential,
       gate: {
@@ -196,10 +229,14 @@ export class Demo {
     return this.activity;
   }
 
-  private async holder(address: string): Promise<HolderState> {
+  /** A holder that already has a vault. */
+  private async holder(address: string): Promise<HolderState & { vault: string }> {
     const holder = await this.load(address);
-    if (!holder) throw new HttpError(404, "UnknownHolder", "Create the holder's vault first");
-    return holder;
+    if (!holder?.vault) {
+      throw new HttpError(404, "UnknownHolder", "Create the holder's vault first");
+    }
+    // The stored object itself: callers mutate it.
+    return holder as HolderState & { vault: string };
   }
 
   /**
@@ -216,6 +253,7 @@ export class Demo {
       ? (record.claims.tier as Tier)
       : "Gold";
     const restored: HolderState = {
+      did: await this.chain.vaultDid(record.vault),
       vault: record.vault,
       credential: { vcId: record.vcId, tier, issuedAt: record.registeredAt, revokedAt: null },
     };

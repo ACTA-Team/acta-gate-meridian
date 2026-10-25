@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { CredentialStatus } from "@acta-gate/shared";
 import { Keypair, StrKey } from "@stellar/stellar-sdk";
 
+import { didFromId, newDidId } from "../did.js";
 import { ContractError, type GateChain, type GateRecord, type PaymentOutcome } from "./types.js";
 
 interface MockVc {
@@ -12,6 +13,7 @@ interface MockVc {
 
 interface MockVault {
   owner: string;
+  did: string | null;
   revoked: boolean;
   vcs: Map<string, MockVc>;
 }
@@ -34,10 +36,18 @@ export class MockChain implements GateChain {
 
   constructor(private readonly requiredTier: string) {}
 
-  async deployVault(owner: string) {
+  async registerDid() {
+    return { did: didFromId(newDidId(), "testnet"), txHash: null };
+  }
+
+  async deployVault(owner: string, didUri: string) {
     const vault = randomContract();
-    this.vaults.set(vault, { owner, revoked: false, vcs: new Map() });
+    this.vaults.set(vault, { owner, did: didUri || null, revoked: false, vcs: new Map() });
     return { vault, txHash: null };
+  }
+
+  async vaultDid(vault: string) {
+    return this.vaults.get(vault)?.did ?? null;
   }
 
   async issue(vault: string, vcId: string) {

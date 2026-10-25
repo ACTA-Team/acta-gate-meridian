@@ -5,6 +5,7 @@ import {
   Ban,
   ExternalLink,
   FileCheck2,
+  IdCard,
   Link2,
   type LucideIcon,
   Send,
@@ -16,6 +17,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<ActivityKind, { icon: LucideIcon; alert?: boolean }> = {
+  did_registered: { icon: IdCard },
   vault_deployed: { icon: Vault },
   credential_issued: { icon: FileCheck2 },
   gate_registered: { icon: Link2 },

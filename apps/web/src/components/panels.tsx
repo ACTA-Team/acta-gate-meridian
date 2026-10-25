@@ -1,7 +1,16 @@
 "use client";
 
-import { TIERS, type Tier } from "@acta-gate/shared";
-import { Ban, Fingerprint, Loader2, RotateCcw, Send, ShieldCheck, UserX } from "lucide-react";
+import { didResolverUrl, TIERS, type Tier } from "@acta-gate/shared";
+import {
+  Ban,
+  ExternalLink,
+  Fingerprint,
+  Loader2,
+  RotateCcw,
+  Send,
+  ShieldCheck,
+  UserX,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 
@@ -67,6 +76,36 @@ function ActionIcon({
   );
 }
 
+/** The holder's `did:stellar`, with a link to ACTA's resolver on testnet. */
+function Did({ value, resolvable }: { value: string; resolvable: boolean }) {
+  const id = value.slice(value.lastIndexOf(":") + 1);
+  const label = `did:stellar:…:${id.slice(0, 4)}…${id.slice(-4)}`;
+  const text = (
+    <span className="inline-flex items-center gap-2 font-mono text-[12px] text-foreground/85">
+      {label}
+      {resolvable && <ExternalLink className="size-3.5 opacity-40 group-hover:opacity-100" />}
+    </span>
+  );
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="eyebrow">Cédula</span>
+      {resolvable ? (
+        <a
+          href={didResolverUrl(value)}
+          target="_blank"
+          rel="noreferrer"
+          title={`${value} · resolver en did.acta.build`}
+          className="group transition-colors hover:text-foreground"
+        >
+          {text}
+        </a>
+      ) : (
+        <span title={value}>{text}</span>
+      )}
+    </div>
+  );
+}
+
 export function HolderPanel({ demo }: { demo: DemoState }) {
   const { config, holder, busy } = demo;
   const testnet = config?.mode === "testnet";
@@ -89,6 +128,7 @@ export function HolderPanel({ demo }: { demo: DemoState }) {
           >
             <div className="space-y-2 rounded-xl bg-surface-sunken p-4">
               <Address label="Smart account" value={holder.address} />
+              {holder.did && <Did value={holder.did} resolvable={testnet} />}
               {holder.vault && <Address label="Vault" value={holder.vault} />}
             </div>
             <CredentialCard holder={holder} issuerName={config?.issuer.name ?? "Emisor"} />
