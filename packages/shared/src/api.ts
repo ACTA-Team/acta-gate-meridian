@@ -38,8 +38,15 @@ export interface HolderCredential {
   revokedAt: string | null;
 }
 
+/** Universal Resolver endpoint of ACTA's hosted `did:stellar` resolver. */
+export const DID_RESOLVER_URL = "https://did.acta.build/1.0/identifiers";
+
+export const didResolverUrl = (did: string) => `${DID_RESOLVER_URL}/${did}`;
+
 export interface HolderView {
   address: string;
+  /** The holder's `did:stellar`, registered by ACTA with the passkey as its key. */
+  did: string | null;
   vault: string | null;
   credential: HolderCredential | null;
   /** What `vc-gate` answers right now. */
@@ -58,6 +65,7 @@ export interface ActionResult {
 }
 
 export type ActivityKind =
+  | "did_registered"
   | "vault_deployed"
   | "credential_issued"
   | "gate_registered"

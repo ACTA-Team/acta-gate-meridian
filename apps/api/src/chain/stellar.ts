@@ -4,6 +4,7 @@ import { CREDENTIAL_TYPE, type CredentialStatus } from "@acta-gate/shared";
 import { contract, Keypair, rpc } from "@stellar/stellar-sdk";
 
 import type { Config } from "../config.js";
+import { didFromId, multikeyP256, newDidId } from "../did.js";
 import { payFromSmartAccount } from "./treasury.js";
 import { ContractError, type GateChain, type GateRecord, type PaymentOutcome } from "./types.js";
 
@@ -73,16 +74,69 @@ export class StellarChain implements GateChain {
     this.rpc = new rpc.Server(config.stellar.rpcUrl);
   }
 
-  async deployVault(owner: string) {
+  /**
+   * The holder's passkey is read from their smart account, not taken from
+   * the browser: rule 0 holds `Signer::External(webauthn verifier, key)`.
+   * The DID's only authentication key is that passkey, Multikey-encoded.
+   */
+  async registerDid(holder: string) {
+    const passkey = await this.passkeyOf(holder);
+    const didId = newDidId();
+    const did = didFromId(didId, "testnet");
+    const registry = await this.client(
+      this.config.stellar.contracts.didStellarRegistry,
+      this.sponsor,
+    );
+    const tx = await registry.register_sponsored!({
+      sponsor: this.sponsor.publicKey(),
+      did_id: didId,
+      initial_record: {
+        controller: holder,
+        authentication: [{ public_key_multibase: multikeyP256(passkey) }],
+        assertion_method: [],
+        key_agreement: [],
+        services: [],
+        metadata_uri: null,
+        metadata_hash: null,
+        // Set by the contract on registration.
+        version: 0,
+        created_ledger: 0,
+        updated_ledger: 0,
+        deactivated: false,
+      },
+    });
+    return { did, txHash: await this.send(tx, this.sponsor) };
+  }
+
+  async deployVault(owner: string, didUri: string) {
     const factory = await this.client(this.config.VAULT_FACTORY_ID!, this.sponsor);
     const tx = await factory.deploy_sponsored!({
       deployer: this.sponsor.publicKey(),
       owner,
-      did_uri: "",
+      did_uri: didUri,
       user_salt: randomBytes(32),
     });
     const txHash = await this.send(tx, this.sponsor);
     return { vault: tx.result as string, txHash };
+  }
+
+  async vaultDid(vault: string) {
+    const v = await this.client(vault, this.issuer);
+    const { result } = await v.vault_did!();
+    return typeof result === "string" && result.length > 0 ? result : null;
+  }
+
+  /** The uncompressed P-256 key of the account's WebAuthn signer on rule 0. */
+  private async passkeyOf(holder: string): Promise<Uint8Array> {
+    const account = await this.client(holder, this.sponsor);
+    const { result } = await account.get_context_rule!({ context_rule_id: 0 });
+    const signers = (result as { signers?: { tag: string; values: unknown[] }[] }).signers ?? [];
+    const webauthn = this.config.stellar.smartAccounts.webauthnVerifier;
+    const passkey = signers.find((s) => s.tag === "External" && s.values[0] === webauthn);
+    if (!passkey) {
+      throw new ContractError("NoPasskey", "The account has no WebAuthn signer on its rule 0");
+    }
+    return new Uint8Array(passkey.values[1] as Uint8Array);
   }
 
   async issue(vault: string, vcId: string, vcData: string) {

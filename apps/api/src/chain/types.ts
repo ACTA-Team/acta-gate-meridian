@@ -36,8 +36,16 @@ export interface GateChain {
   readonly issuerAddress: string;
   readonly treasuryAddress: string;
 
+  /**
+   * `did-stellar-registry.register_sponsored(ACTA, did_id, record)`: the
+   * holder's `did:stellar`, controlled by their smart account, with the
+   * passkey the account already holds on chain as its authentication key.
+   */
+  registerDid(holder: string): Promise<Receipt & { did: string }>;
   /** `vc-vault-factory.deploy_sponsored(ACTA, owner, did_uri, salt)`. */
-  deployVault(owner: string): Promise<Receipt & { vault: string }>;
+  deployVault(owner: string, didUri: string): Promise<Receipt & { vault: string }>;
+  /** `vault.vault_did()`: the DID the vault was deployed with. */
+  vaultDid(vault: string): Promise<string | null>;
   /** `vault.issue(vc_id, vc_data, vault, GrantFox, issuer_did)`. */
   issue(vault: string, vcId: string, vcData: string): Promise<Receipt>;
   /** `vc-gate.register(GrantFox, vault, vc_id, credential_type, claims)`. */

@@ -23,10 +23,21 @@ describe("demo flow", () => {
   });
 
   it("pays a Gold holder, rejects others, and rejects after the issuer revokes", async () => {
-    // 1. ACTA creates Marta's vault.
+    // 1a. ACTA registers Marta's did:stellar.
+    const did = await request(app).post("/dids").send({ address: marta });
+    expect(did.status).toBe(201);
+    const didView = (did.body as ActionResult).holder;
+    expect(didView.did).toMatch(/^did:stellar:testnet:[a-z2-7]{26}$/);
+    expect(didView.vault).toBeNull();
+
+    // 1b. ACTA creates Marta's vault, bound to that DID.
     const created = await request(app).post("/holders").send({ address: marta });
     expect(created.status).toBe(201);
     expect((created.body as ActionResult).holder.vault).toMatch(/^C/);
+    expect((created.body as ActionResult).holder.did).toBe(didView.did);
+    // Registering again is a no-op: same DID, nothing sent.
+    const again = (await request(app).post("/dids").send({ address: marta })).body as ActionResult;
+    expect(again.holder.did).toBe(didView.did);
 
     // 2. GrantFox issues Contributor Gold in the vault, then registers it in vc-gate.
     const issued = (await request(app).post("/credentials").send({ address: marta, tier: "Gold" }))
@@ -64,7 +75,22 @@ describe("demo flow", () => {
       "gate_registered",
       "credential_issued",
       "vault_deployed",
+      "did_registered",
     ]);
+  });
+
+  it("creates a vault without a DID when the holder skipped that step", async () => {
+    const created = (await request(app).post("/holders").send({ address: marta }))
+      .body as ActionResult;
+    expect(created.holder.did).toBeNull();
+    expect(created.holder.vault).toMatch(/^C/);
+  });
+
+  it("refuses to issue when the holder has a DID but no vault yet", async () => {
+    await request(app).post("/dids").send({ address: marta });
+    const res = await request(app).post("/credentials").send({ address: marta });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("UnknownHolder");
   });
 
   it("rejects a Silver holder when the treasury requires Gold", async () => {

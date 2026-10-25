@@ -43,6 +43,8 @@ export const api = {
   config: () => request<DemoConfig>("/config"),
   activity: () => request<ActivityEvent[]>("/activity"),
   holder: (address: string) => request<HolderView>(`/holders/${address}`),
+  registerDid: (address: string) =>
+    request<ActionResult>("/dids", { method: "POST", body: { address } }),
   createHolder: (address: string) =>
     request<ActionResult>("/holders", { method: "POST", body: { address } }),
   issue: (address: string, tier: Tier) =>

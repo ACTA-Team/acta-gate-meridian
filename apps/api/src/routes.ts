@@ -32,6 +32,11 @@ export function demoRouter(demo: Demo) {
     res.json(demo.recentActivity());
   });
 
+  router.post("/dids", async (req, res) => {
+    const { address } = HolderBody.parse(req.body);
+    res.status(201).json(await demo.registerDid(address));
+  });
+
   router.post("/holders", async (req, res) => {
     const { address } = HolderBody.parse(req.body);
     res.status(201).json(await demo.createHolder(address));
