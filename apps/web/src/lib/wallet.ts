@@ -18,6 +18,8 @@ export async function createHolderWallet(
   userName: string,
   m: Messages["wallet"],
 ): Promise<{ address: string; txHash: string | null }> {
+  // Without it smart-account-kit falls back to its shared, sign-only deployer and refuses to deploy.
+  if (!process.env.NEXT_PUBLIC_DEPLOYER_SECRET) throw new Error(m.missingDeployer);
   const kit = await holderKit();
   const { contractId, submitResult } = await kit.createWallet("ACTA Gate", userName, {
     autoSubmit: true,

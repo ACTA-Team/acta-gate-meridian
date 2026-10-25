@@ -169,6 +169,8 @@ export const es = {
   wallet: {
     deployFailed: (reason: string) => `No se pudo desplegar la smart account: ${reason}`,
     notController: "Esta passkey no controla la smart account de Marta",
+    missingDeployer:
+      "Falta NEXT_PUBLIC_DEPLOYER_SECRET en apps/web/.env: la cuenta de testnet que paga el despliegue de la smart account. Configúrala y reinicia pnpm dev.",
   },
   activity: {
     empty: "Todavía no hay actividad. Empieza creando la wallet de Marta.",
@@ -374,6 +376,8 @@ export const en: Messages = {
   wallet: {
     deployFailed: (reason) => `Could not deploy the smart account: ${reason}`,
     notController: "This passkey does not control Marta's smart account",
+    missingDeployer:
+      "NEXT_PUBLIC_DEPLOYER_SECRET is missing in apps/web/.env: the testnet account that pays for deploying the smart account. Set it and restart pnpm dev.",
   },
   activity: {
     empty: "No activity yet. Start by creating Marta's wallet.",
