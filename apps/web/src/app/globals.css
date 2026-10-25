@@ -1,0 +1,456 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ===========================================================
+   ACTA - Institutional theme
+
+   Palette, and nothing else (white and black allowed):
+     Soft Cream #FEF6EB · Lavender Haze #A7A8C6 · Bright Blue #455DFD
+     Night Blue #080824 · Burgundy #640E1D · Cherry Pie #BC0F0F
+
+   No derived shades. Where something needs to be quieter it uses one of
+   these colours with opacity, never a new hex.
+
+   - Dark (default): night page, cream type and cream "paper" panels, as in
+     the pitch deck: bold cream headlines with the key phrase in bright blue.
+   - Light: white page, cream only as a detail, night "paper" panels. The
+     paper inverts so a credential always stands out from the page.
+
+   Bright blue carries every action. The reds are details only.
+   =========================================================== */
+:root {
+  --night: #080824;
+  --cream: #fef6eb;
+  --lavender: #a7a8c6;
+  --blue: #455dfd;
+  --burgundy: #640e1d;
+  --cherry: #bc0f0f;
+
+  /* ---- Light ----------------------------------------------------------
+     White page. Cream is a detail: small panels, pills, list wells. */
+  --background: #ffffff;
+  --foreground: #080824;
+  --surface: #ffffff;
+  --surface-sunken: #fef6eb;
+  --surface-raised: #ffffff;
+  --band: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #080824;
+  --popover: #ffffff;
+  --popover-foreground: #080824;
+  --primary: #455dfd;
+  --primary-foreground: #ffffff;
+  --secondary: #ffffff;
+  --secondary-foreground: #080824;
+  --muted: #ffffff;
+  --muted-foreground: rgb(8 8 36 / 0.68);
+  --accent: #455dfd;
+  --accent-foreground: #ffffff;
+  --highlight: #455dfd;
+  --destructive: #bc0f0f;
+  --destructive-foreground: #ffffff;
+  --border: rgb(167 168 198 / 0.55);
+  --border-strong: #a7a8c6;
+  --input: #a7a8c6;
+  --ring: #455dfd;
+
+  /* Inverse panels: night blue on the white page. */
+  --paper: #080824;
+  --paper-ink: #fef6eb;
+  --paper-muted: rgb(254 246 235 / 0.65);
+  --paper-inset: rgb(254 246 235 / 0.07);
+  --paper-alert: #bc0f0f;
+  --paper-line: rgb(167 168 198 / 0.45);
+
+  --rules: rgb(8 8 36 / 0.05);
+  --glow: rgb(69 93 253 / 0.1);
+  --shadow-soft: 0 24px 60px -30px rgb(8 8 36 / 0.3);
+  --shadow-lift: 0 30px 70px -30px rgb(8 8 36 / 0.38);
+  --scroll-thumb: #a7a8c6;
+  --scroll-thumb-hover: #455dfd;
+
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: #080824;
+  --foreground: #fef6eb;
+  --surface: rgb(167 168 198 / 0.06);
+  --surface-sunken: rgb(0 0 0 / 0.25);
+  --surface-raised: rgb(167 168 198 / 0.1);
+  --band: rgb(0 0 0 / 0.25);
+  --card: rgb(167 168 198 / 0.06);
+  --card-foreground: #fef6eb;
+  --popover: #080824;
+  --popover-foreground: #fef6eb;
+  --primary: #455dfd;
+  --primary-foreground: #ffffff;
+  --secondary: rgb(167 168 198 / 0.1);
+  --secondary-foreground: #fef6eb;
+  --muted: rgb(167 168 198 / 0.1);
+  --muted-foreground: #a7a8c6;
+  --accent: #a7a8c6;
+  --accent-foreground: #080824;
+  --highlight: #fef6eb;
+  --border: rgb(167 168 198 / 0.16);
+  --border-strong: rgb(167 168 198 / 0.3);
+  --input: rgb(167 168 198 / 0.3);
+
+  /* Cream paper on the night page. */
+  --paper: #fef6eb;
+  --paper-ink: #080824;
+  --paper-muted: rgb(8 8 36 / 0.58);
+  --paper-inset: rgb(8 8 36 / 0.05);
+  --paper-alert: #bc0f0f;
+  --paper-line: #a7a8c6;
+
+  --rules: rgb(167 168 198 / 0.06);
+  --glow: rgb(69 93 253 / 0.22);
+  --shadow-soft: 0 24px 60px -28px rgb(0 0 0 / 0.75);
+  --shadow-lift: 0 30px 70px -28px rgb(0 0 0 / 0.9);
+  --scroll-thumb: rgb(167 168 198 / 0.4);
+  --scroll-thumb-hover: #455dfd;
+}
+
+@theme inline {
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-space-mono);
+
+  --color-night: var(--night);
+  --color-cream: var(--cream);
+  --color-lavender: var(--lavender);
+  --color-blue: var(--blue);
+  --color-burgundy: var(--burgundy);
+  --color-cherry: var(--cherry);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-raised: var(--surface-raised);
+  --color-band: var(--band);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-highlight: var(--highlight);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-paper: var(--paper);
+  --color-paper-ink: var(--paper-ink);
+  --color-paper-muted: var(--paper-muted);
+  --color-paper-inset: var(--paper-inset);
+  --color-paper-alert: var(--paper-alert);
+  --color-paper-line: var(--paper-line);
+  --color-glow: var(--glow);
+
+  --shadow-soft: var(--shadow-soft);
+  --shadow-lift: var(--shadow-lift);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 8px);
+
+  --animate-caret-blink: caret-blink 1.2s ease-out infinite;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-drift: drift 18s ease-in-out infinite;
+  --animate-drift-slow: drift 26s ease-in-out infinite reverse;
+  --animate-ping-soft: ping-soft 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-scroll-line: scroll-line 2.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    scroll-padding-top: 5rem;
+    color-scheme: light;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-feature-settings:
+      "ss01" on,
+      "tnum" on;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.025em;
+  }
+  ::selection {
+    background: #455dfd;
+    color: #ffffff;
+  }
+
+  /* ---- Scrollbar: a slim pill that turns blue under the pointer. ---- */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--background);
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scroll-thumb);
+    border: 2px solid var(--background);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scroll-thumb-hover);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* Theme toggle: the new theme is revealed by the toggler's clip-path. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+@layer utilities {
+  /* Mono label: the small uppercase captions of the brand sheet. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /* Vertical rule texture, the same rhythm the stripe icons are drawn with. */
+  .bg-rules {
+    background-image: repeating-linear-gradient(to right, var(--rules) 0 1px, transparent 1px 12px);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Swipeable rows on phones: scroll, but without a visible bar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Scroll-reveal: fade, rise and unblur, once, when the element enters. */
+  .reveal {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(18px);
+    transition:
+      opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+      filter 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .reveal.in-view {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+
+  /* Stripe icons draw their lines in from the bottom once revealed. */
+  .stripe-shape {
+    transition: clip-path 1.1s cubic-bezier(0.65, 0, 0.35, 1) 0.25s;
+  }
+  .reveal:not(.in-view) .stripe-shape {
+    clip-path: inset(100% 0 0 0);
+  }
+
+  /* Hairlines that extend once revealed. */
+  .grow-line {
+    transform-origin: left;
+    transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1) 0.35s;
+  }
+  .reveal:not(.in-view) .grow-line {
+    transform: scaleX(0);
+  }
+
+  /* Gentle lift for interactive cards. */
+  .lift {
+    transition:
+      transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 0.35s,
+      background-color 0.35s;
+  }
+  .lift:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lift);
+  }
+}
+
+/* ---- Entrance animations (CSS, so content is never hidden without JS) --- */
+.enter {
+  animation: enter 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+.fan {
+  transform: translate(var(--fx), var(--fy)) rotate(var(--fr));
+  animation: fan 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+.draw {
+  stroke-dasharray: 1;
+  animation: draw 0.6s ease-out both;
+  animation-delay: var(--d, 0ms);
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--enter-y, 18px));
+    filter: blur(var(--enter-blur, 6px));
+  }
+}
+@keyframes fan {
+  from {
+    opacity: 0;
+    transform: none;
+  }
+}
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  70%,
+  100% {
+    opacity: 1;
+  }
+  20%,
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(4%, -6%) scale(1.08);
+  }
+  66% {
+    transform: translate(-5%, 4%) scale(0.95);
+  }
+}
+
+@keyframes scroll-line {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(200%);
+  }
+}
+
+@keyframes progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes ping-soft {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  80%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    transition: none;
+  }
+  .reveal:not(.in-view) .stripe-shape,
+  .reveal:not(.in-view) .grow-line {
+    clip-path: none;
+    transform: none;
+  }
+  .lift:hover {
+    transform: none;
+  }
+  .enter,
+  .fan,
+  .draw,
+  .animate-float,
+  .animate-drift,
+  .animate-drift-slow,
+  .animate-ping-soft,
+  .animate-scroll-line {
+    animation: none;
+  }
+}
