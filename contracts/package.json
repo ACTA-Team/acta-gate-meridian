@@ -1,7 +1,7 @@
 {
   "name": "@acta-gate/contracts",
   "private": true,
-  "description": "Soroban contracts: ACTA's vc-vault, vc-vault-factory and did-stellar-registry, and ACTA Gate's vc-gate and credential-policy.",
+  "description": "Soroban contracts: ACTA's vc-vault, vc-vault-factory and did-stellar-registry, and ACTA Gate's vc-gate, credential-policy and credential-vote.",
   "scripts": {
     "build": "stellar contract build",
     "test": "cargo build -p vc-vault-contract --target wasm32v1-none --release && cargo test",
