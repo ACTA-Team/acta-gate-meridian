@@ -9,8 +9,8 @@ mod test;
 
 use soroban_sdk::{
     auth::Context, contract, contractclient, contracterror, contractimpl, contracttype,
-    panic_with_error, symbol_short, Address, Env, MuxedAddress, String, Symbol, TryFromVal, Val,
-    Vec,
+    panic_with_error, symbol_short, Address, Env, Map, MuxedAddress, String, Symbol, TryFromVal,
+    Val, Vec,
 };
 use stellar_accounts::{
     policies::Policy,
@@ -27,6 +27,9 @@ pub enum Error {
     NotInstalled = 4,
     /// A `transfer` or `execute` whose arguments cannot be read. Fails closed.
     MalformedCall = 5,
+    /// The installed `Requirement` lists the same claim key twice, so the two
+    /// values contradict each other. Fails closed.
+    MalformedRequirement = 6,
 }
 
 #[contracttype]
@@ -59,14 +62,14 @@ enum DataKey {
 #[allow(dead_code)]
 #[contractclient(name = "GateClient")]
 trait Gate {
-    fn is_valid(e: Env, holder: Address, issuer: Address, credential_type: String) -> bool;
-    fn has_claim(
+    /// `vc-gate`'s `check`: a valid credential plus every claim matching, in a
+    /// single call (`docs/IMPLEMENTATION ES.md` section 5.4).
+    fn check(
         e: Env,
         holder: Address,
         issuer: Address,
         credential_type: String,
-        key: String,
-        value: String,
+        claims: Map<String, String>,
     ) -> bool;
 }
 
@@ -80,9 +83,7 @@ impl CredentialPolicy {
         smart_account: Address,
         context_rule_id: u32,
     ) -> Option<Requirement> {
-        e.storage()
-            .persistent()
-            .get(&DataKey::Requirement(smart_account, context_rule_id))
+        read_requirement(&e, &smart_account, context_rule_id)
     }
 }
 
@@ -146,13 +147,13 @@ impl Policy for CredentialPolicy {
         smart_account: Address,
     ) {
         smart_account.require_auth();
-        let key = DataKey::Requirement(smart_account, context_rule.id);
+        let key = requirement_key(&smart_account, context_rule.id);
         e.storage().persistent().set(&key, &install_params);
     }
 
     fn uninstall(e: &Env, context_rule: ContextRule, smart_account: Address) {
         smart_account.require_auth();
-        let key = DataKey::Requirement(smart_account, context_rule.id);
+        let key = requirement_key(&smart_account, context_rule.id);
         if !e.storage().persistent().has(&key) {
             panic_with_error!(e, Error::NotInstalled);
         }
@@ -160,18 +161,30 @@ impl Policy for CredentialPolicy {
     }
 }
 
+fn requirement_key(account: &Address, rule_id: u32) -> DataKey {
+    DataKey::Requirement(account.clone(), rule_id)
+}
+
+fn read_requirement(e: &Env, account: &Address, rule_id: u32) -> Option<Requirement> {
+    e.storage()
+        .persistent()
+        .get(&requirement_key(account, rule_id))
+}
+
 fn recipient_is_credentialed(e: &Env, account: &Address, rule_id: u32, to: &Address) -> bool {
-    let key = DataKey::Requirement(account.clone(), rule_id);
-    let req: Requirement = match e.storage().persistent().get(&key) {
+    let req = match read_requirement(e, account, rule_id) {
         Some(r) => r,
         None => panic_with_error!(e, Error::NotInstalled),
     };
-    let gate = GateClient::new(e, &req.gate);
-    // `has_claim` already includes `is_valid`.
-    if req.claims.is_empty() {
-        return gate.is_valid(to, &req.issuer, &req.credential_type);
+    // One cross-contract call whatever the number of claims. `Requirement`
+    // holds a `Vec`, so it can carry the same key twice with different values:
+    // a `Map` would silently keep one of them, so that fails closed instead.
+    let mut claims = Map::new(e);
+    for c in req.claims.iter() {
+        claims.set(c.key, c.value);
     }
-    req.claims
-        .iter()
-        .all(|c| gate.has_claim(to, &req.issuer, &req.credential_type, &c.key, &c.value))
+    if claims.len() != req.claims.len() {
+        panic_with_error!(e, Error::MalformedRequirement);
+    }
+    GateClient::new(e, &req.gate).check(to, &req.issuer, &req.credential_type, &claims)
 }

@@ -104,6 +104,11 @@ impl Setup<'_> {
         self.gate.is_valid(&self.holder, &self.issuer, &ty(&self.e))
     }
 
+    fn check(&self, claims: &Map<String, String>) -> bool {
+        self.gate
+            .check(&self.holder, &self.issuer, &ty(&self.e), claims)
+    }
+
     fn has(&self, key: &str, value: &str) -> bool {
         self.gate.has_claim(
             &self.holder,
@@ -280,4 +285,54 @@ fn a_new_registration_replaces_the_old_one() {
             .vc_id,
         gold_id
     );
+}
+
+#[test]
+fn check_matches_every_claim_in_one_call() {
+    let t = setup();
+    let vc_id = t.issue(&t.issuer, "vc-1");
+    let both = map![
+        &t.e,
+        (s(&t.e, "tier"), s(&t.e, "Gold")),
+        (s(&t.e, "program"), s(&t.e, "OSS"))
+    ];
+    t.register(&vc_id, &both);
+
+    assert!(t.check(&Map::new(&t.e)), "no claims is just is_valid");
+    assert!(t.check(&gold(&t.e)), "a subset counts");
+    assert!(t.check(&both));
+    assert!(!t.check(&map![&t.e, (s(&t.e, "tier"), s(&t.e, "Silver"))]));
+    assert!(
+        !t.check(&map![
+            &t.e,
+            (s(&t.e, "tier"), s(&t.e, "Gold")),
+            (s(&t.e, "name"), s(&t.e, "Marta"))
+        ]),
+        "a key the record does not carry fails"
+    );
+}
+
+#[test]
+fn check_on_an_unknown_holder_is_false() {
+    let t = setup();
+    assert!(!t.check(&Map::new(&t.e)));
+    assert!(!t.check(&gold(&t.e)));
+}
+
+#[test]
+fn both_revocations_reach_check() {
+    let t = setup();
+    let vc_id = t.issue(&t.issuer, "vc-1");
+    t.register(&vc_id, &gold(&t.e));
+    assert!(t.check(&gold(&t.e)));
+
+    t.vault.revoke_by_issuer(&vc_id, &s(&t.e, "2026-10-25"));
+    assert!(!t.check(&gold(&t.e)));
+    assert!(!t.check(&Map::new(&t.e)));
+
+    let t = setup();
+    let vc_id = t.issue(&t.issuer, "vc-1");
+    t.register(&vc_id, &gold(&t.e));
+    t.vault.revoke_vault();
+    assert!(!t.check(&gold(&t.e)));
 }

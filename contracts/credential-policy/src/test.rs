@@ -4,7 +4,7 @@ use soroban_sdk::{
     auth::{Context, ContractContext},
     contract, contractimpl, symbol_short,
     testutils::Address as _,
-    vec, Address, Bytes, Env, IntoVal, String, Symbol, Val, Vec,
+    vec, Address, Bytes, Env, IntoVal, Map, String, Symbol, Val, Vec,
 };
 use stellar_accounts::smart_account::{ContextRule, ContextRuleType, Signer};
 
@@ -20,20 +20,19 @@ impl FakeGate {
         e.storage().persistent().set(&holder, &tier);
     }
 
-    pub fn is_valid(e: Env, holder: Address, _issuer: Address, _credential_type: String) -> bool {
-        e.storage().persistent().has(&holder)
-    }
-
-    pub fn has_claim(
+    pub fn check(
         e: Env,
         holder: Address,
         _issuer: Address,
         _credential_type: String,
-        key: String,
-        value: String,
+        claims: Map<String, String>,
     ) -> bool {
-        let tier: Option<String> = e.storage().persistent().get(&holder);
-        key == String::from_str(&e, "tier") && tier == Some(value)
+        let Some(tier) = e.storage().persistent().get::<_, String>(&holder) else {
+            return false;
+        };
+        claims
+            .iter()
+            .all(|(k, v)| k == String::from_str(&e, "tier") && v == tier)
     }
 }
 
@@ -272,5 +271,14 @@ fn uninstall_twice_fails() {
     assert_eq!(
         t.policy.try_uninstall(&t.rule, &t.account),
         Err(Ok(Error::NotInstalled.into()))
+    );
+}
+
+#[test]
+fn a_requirement_with_a_duplicate_claim_key_fails_closed() {
+    let t = setup(&[("tier", "Gold"), ("tier", "Silver")]);
+    assert_eq!(
+        t.enforce(&t.transfer(&t.marta)),
+        err(Error::MalformedRequirement)
     );
 }

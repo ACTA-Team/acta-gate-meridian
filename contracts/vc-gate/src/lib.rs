@@ -104,6 +104,26 @@ impl VcGate {
         }
     }
 
+    /// `is_valid` plus every entry in `claims` matching the record. A caller
+    /// that needs several claims pays one cross-contract call instead of one
+    /// per claim; an empty map is just `is_valid`.
+    pub fn check(
+        e: Env,
+        holder: Address,
+        issuer: Address,
+        credential_type: String,
+        claims: Map<String, String>,
+    ) -> bool {
+        match storage::read_record(&e, &holder, &issuer, &credential_type) {
+            // Compare the claims first: a mismatch costs no vault call.
+            Some(record) => {
+                claims.iter().all(|(k, v)| record.claims.get(k) == Some(v))
+                    && vault_says_valid(&e, &record)
+            }
+            None => false,
+        }
+    }
+
     pub fn get_record(
         e: Env,
         holder: Address,
