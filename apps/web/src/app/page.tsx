@@ -81,6 +81,30 @@ export default function Home() {
             </p>
           </section>
 
+          <details
+            className="enter group mt-6 max-w-3xl rounded-xl border border-border bg-surface text-[13px] open:border-border-strong"
+            style={delay(800)}
+          >
+            <summary className="eyebrow flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-foreground/80 transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <span>{t.meta.whoIsWho.summary}</span>
+              <span className="text-muted-foreground group-open:hidden">
+                {t.meta.whoIsWho.items
+                  .slice(0, 3)
+                  .map((i) => i.name)
+                  .join(" · ")}
+              </span>
+              <span className="hidden text-muted-foreground group-open:inline">−</span>
+            </summary>
+            <dl className="grid gap-x-6 gap-y-2 border-t border-border px-4 py-3 text-muted-foreground sm:grid-cols-[auto_1fr]">
+              {t.meta.whoIsWho.items.map(({ name, role }) => (
+                <Fragment key={name}>
+                  <dt className="font-medium text-foreground">{name}</dt>
+                  <dd className="leading-relaxed">{role}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          </details>
+
           {demo.offline && (
             <div className="enter mt-6 flex items-center gap-3 rounded-xl border border-cherry/40 bg-cherry/10 px-4 py-3 text-sm">
               <WifiOff className="size-4 shrink-0 text-cherry" />
@@ -91,6 +115,9 @@ export default function Home() {
           )}
 
           <section className="mt-10">
+            <p className="enter mb-4 text-sm text-muted-foreground" style={delay(900)}>
+              {t.meta.stepsIntro}
+            </p>
             <Steps holder={demo.holder} activity={demo.activity} withVote={Boolean(config?.vote)} />
           </section>
 

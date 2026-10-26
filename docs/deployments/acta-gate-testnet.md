@@ -95,6 +95,19 @@ step, which needs a passkey, is skipped:
 
 Not verified yet: proposing and voting, which need a passkey signature from the browser.
 
+## Proposal and vote verified on-chain (passkey)
+
+To be filled from the browser against the `credential-vote` in this document: the same
+holder as the demo, signing with her passkey, so the title's claim closes on chain: one
+credential, two gates, one revocation.
+
+| Step | Tx |
+|---|---|
+| Marta proposes (`propose`, signed with her passkey) | TODO: stellar.expert link |
+| Marta votes (`vote`, signed with her passkey) | TODO: stellar.expert link |
+| An address without a credential tries to vote → `NotCredentialed` | TODO: stellar.expert link (or the simulation error) |
+| GrantFox revokes (`revoke_by_issuer`) → Marta's next vote → `NotCredentialed` | TODO: stellar.expert link |
+
 ## Costs measured on testnet
 
 | Operation | Cost |

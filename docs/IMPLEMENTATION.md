@@ -127,11 +127,13 @@ mod vc_vault {
     soroban_sdk::contractimport!(file = "../target/wasm32v1-none/release/vc_vault_contract.wasm");
 }
 
-#[contractclient(name = "VaultFactoryClient")]
+#[contractclient(name = "FactoryClient")]
 pub trait VaultFactory { fn is_vault(e: Env, vault_address: Address) -> bool; }
 ```
 
-- Requires building the vault WASM before `vc-gate`. CI already does this.
+- Requires building the vault WASM before `vc-gate`. CI already does this, and
+  `vc-gate/build.rs` stops with that exact command when the file is missing (it never
+  runs cargo on its own).
 - **Don't depend on `vc-vault-contract` as a crate.** A contract linked as a
   dependency exports its functions inside the WASM of whoever uses it.
 - **In `is_valid`, use the `try_` methods.** That way an archived vault returns `false`
@@ -143,10 +145,10 @@ pub trait VaultFactory { fn is_vault(e: Env, vault_address: Address) -> bool; }
 pub fn register(e: Env, issuer: Address, vault: Address, vc_id: String,
                 credential_type: String, claims: Map<String, String>) {
     issuer.require_auth();
-    if !VaultFactoryClient::new(&e, &factory(&e)).is_vault(&vault) {
+    if !FactoryClient::new(&e, &factory(&e)).is_vault(&vault) {
         panic_with_error!(&e, Error::NotAVault);
     }
-    check_caps(&e, &credential_type, &claims);                  // type ≤ 64, ≤ 8 claims, values ≤ 64
+    check_caps(&e, &vc_id, &credential_type, &claims);          // vc_id and type ≤ 64, ≤ 8 claims, values ≤ 64
 
     let v = vc_vault::Client::new(&e, &vault);
     match v.get_vc(&vc_id) {
@@ -367,8 +369,10 @@ fn enforce(e: &Env, context: Context, signers: Vec<Signer>, rule: ContextRule, a
 ### The payment and the revocation
 
 6. The treasury pays Marta's `C…`. `credential-policy` asks
-   `vc-gate.is_valid` and `has_claim(..., "tier", "Gold")`: the record points to her
-   vault, `verify_vc` returns `Valid` and the vault isn't revoked → it passes.
+   `vc-gate.check(marta, GrantFox, "ContributorBadge", { tier: "Gold" })`, a single
+   cross-contract call (§5.4): the record points to her vault, the claim matches,
+   `verify_vc` returns `Valid` and the vault isn't revoked → it passes, and the policy
+   emits `Enforced`.
 7. GrantFox calls `vault.revoke_by_issuer(vc_id, date)` → `verify_vc` returns
    `Revoked` → the next payment bounces.
 

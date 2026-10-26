@@ -32,12 +32,17 @@ branch `dev`, commit `282fe47`, and **are modified here, not in the public repo*
 
 ```bash
 cd contracts
-# the vault's WASM first: the factory's tests import it at compile time
+# the vault's WASM first: vc-gate and the factory's tests import it at compile time
 cargo build -p vc-vault-contract --target wasm32v1-none --release
 cargo test
 cargo clippy --all-targets -- -D warnings
 stellar contract build            # stellar-cli 25.2 or later
 ```
+
+If the WASM is missing, `vc-gate/build.rs` stops the build with that same command in its
+message, instead of `contractimport!`'s opaque error. The script only checks that the file
+exists: it does **not** run cargo on its own (a cargo nested inside a build script
+deadlocks on the `target/` lock).
 
 `cargo test -p acta-gate-integration-tests` runs only the treasury's integration tests
 (`integration-tests/tests/treasury.rs`): every case goes through the `__check_auth` of an

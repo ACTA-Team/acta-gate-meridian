@@ -13,4 +13,4 @@ Planned stack: Circom + snarkjs, Groth16 over BN254, Poseidon matching
 [`rs-soroban-poseidon`](https://github.com/stellar/rs-soroban-poseidon).
 
 Nothing here is wired into the build yet, and it is not part of the hackathon
-submission. See the roadmap in the [root README](../README.md#limitations-and-roadmap).
+submission. See the roadmap in the [root README](../README.md#roadmap).
