@@ -42,9 +42,30 @@ export const es = {
       before: `La tesorería de ${issuer} solo le paga a quien tiene una credencial`,
       after: `${r.tier} vigente. Nadie lleva una lista a mano: si ${issuer} la revoca, los pagos se cortan solos. Y la misma credencial sirve para votar: una sola revocación cierra las dos puertas.`,
     }),
-    activity: "Actividad en la red",
+    activity: "Actividad en la red · de todos los visitantes",
     footer: "ACTA Gate · credenciales verificables",
     builtOn: "Hecho sobre",
+    /** Under the hero: who the three roles are, and what a credential is, in one line each. */
+    whoIsWho: {
+      summary: "¿Quién es quién?",
+      items: [
+        {
+          name: "GrantFox",
+          role: "Una plataforma real de contribuidores de Stellar, piloteando credenciales de ACTA.",
+        },
+        { name: "Marta", role: "Una contribuidora (persona del demo)." },
+        {
+          name: "La tesorería",
+          role: "La cuenta en USDC de GrantFox, que ahora decide sola a quién le paga.",
+        },
+        {
+          name: "Credencial",
+          role: "Un certificado digital que GrantFox emite en la bóveda de Marta y puede revocar.",
+        },
+      ],
+    },
+    stepsIntro:
+      "En este demo juegas los tres roles. Seis clics, cada uno una transacción real en testnet; la votación de abajo suma uno más.",
   },
   header: {
     theme: "Cambiar tema",
@@ -82,7 +103,7 @@ export const es = {
     issuerFallback: "Emisor",
     reset: "Empezar con otra titular",
     passkeyHint:
-      "Tu dispositivo protege la cuenta con Face ID o tu huella. No necesitas criptomonedas.",
+      "Tu dispositivo protege la cuenta con Face ID o tu huella; en laptops es Touch ID o Windows Hello. Es testnet: no cuesta nada, sin criptomonedas ni frases secretas.",
     create: "Crear wallet con Face ID",
   },
   credential: {
@@ -144,7 +165,7 @@ export const es = {
     wallet: {
       title: "Wallet de Marta",
       passkey: "Creando tu cuenta",
-      passkeyDetail: "Tu navegador te pide Face ID o tu huella",
+      passkeyDetail: "Tu navegador te pide Face ID, Touch ID o Windows Hello",
       did: "Creando tu identidad digital",
       didDetail: "ACTA la registra por ti, sin costo",
       vault: "Creando tu bóveda de credenciales",
@@ -181,7 +202,7 @@ export const es = {
       sign: "La tesorería prepara el pago",
       signDetail: "Lo firma su responsable",
       policy: "Revisando la credencial",
-      policyDetail: "La tesorería verifica que quien cobra tenga la credencial",
+      policyDetail: "La tesorería le pregunta al contrato: check(tier), una sola llamada",
       rejected: "Pago rechazado",
       done: "Pago aprobado",
       doneDetail: (amount: string, to: string) => `${amount} USDC llegaron a ${short(to)}`,
@@ -270,9 +291,29 @@ export const en: Messages = {
       before: `${issuer}'s treasury only pays people who hold a current`,
       after: `${r.tier} credential. Nobody keeps a list by hand: if ${issuer} revokes it, payments stop on their own. And the same credential lets you vote: one revocation closes both doors.`,
     }),
-    activity: "Network activity",
+    activity: "Network activity · from all visitors",
     footer: "ACTA Gate · verifiable credentials",
     builtOn: "Built on",
+    whoIsWho: {
+      summary: "Who is who?",
+      items: [
+        {
+          name: "GrantFox",
+          role: "A real Stellar contributor platform piloting ACTA credentials.",
+        },
+        { name: "Marta", role: "A contributor (demo persona)." },
+        {
+          name: "The treasury",
+          role: "GrantFox's USDC account, which now decides on its own whom it pays.",
+        },
+        {
+          name: "Credential",
+          role: "A digital certificate GrantFox issues into Marta's vault and can revoke.",
+        },
+      ],
+    },
+    stepsIntro:
+      "In this demo you play all three roles. Six clicks, each one a real testnet transaction; the vote below adds one more.",
   },
   header: {
     theme: "Toggle theme",
@@ -310,7 +351,7 @@ export const en: Messages = {
     issuerFallback: "Issuer",
     reset: "Start over with another holder",
     passkeyHint:
-      "Your device protects the account with Face ID or your fingerprint. No crypto needed.",
+      "Your device protects the account with Face ID or your fingerprint; on laptops it's Touch ID or Windows Hello. It's testnet: it costs nothing, no crypto, no secret phrases.",
     create: "Create wallet with Face ID",
   },
   credential: {
@@ -372,7 +413,7 @@ export const en: Messages = {
     wallet: {
       title: "Marta's wallet",
       passkey: "Creating your account",
-      passkeyDetail: "Your browser asks for Face ID or your fingerprint",
+      passkeyDetail: "Your browser asks for Face ID, Touch ID or Windows Hello",
       did: "Creating your digital identity",
       didDetail: "ACTA registers it for you, free of charge",
       vault: "Creating your credential vault",
@@ -409,7 +450,7 @@ export const en: Messages = {
       sign: "The treasury prepares the payment",
       signDetail: "Signed by its manager",
       policy: "Checking the credential",
-      policyDetail: "The treasury verifies that the recipient holds the credential",
+      policyDetail: "The treasury asks the contract: check(tier), a single call",
       rejected: "Payment rejected",
       done: "Payment approved",
       doneDetail: (amount, to) => `${amount} USDC reached ${short(to)}`,

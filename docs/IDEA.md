@@ -129,8 +129,8 @@ the next query.
 ```
  1. issuer.require_auth()
  2. vault_factory.is_vault(vault)                          else NotAVault
- 3. credential_type ≤ 64 bytes; claims ≤ 8 entries,
-    each value ≤ 64 bytes                                  else InputTooLong
+ 3. vc_id ≤ 64 bytes; credential_type ≤ 64 bytes;
+    claims ≤ 8 entries, each key and value ≤ 64 bytes      else InputTooLong
  4. vault.get_vc(vc_id).issuer == issuer                   else NotTheIssuer
  5. vault.verify_vc(vc_id) == Valid and !vault.is_revoked() else CredentialNotValid
  6. holder = vault.vault_owner()
@@ -151,7 +151,11 @@ r.vault.verify_vc(r.vc_id) == Valid                (holder and issuer revocation
 
 `has_claim` is `is_valid` plus `r.claims[key] == value`. `check` is `is_valid` plus
 all the claims passed to it at once, so that a caller that needs several does not pay
-one cross-contract call for each: it is what `credential-policy` uses.
+one cross-contract call for each: it is what `credential-policy` and `credential-vote` use.
+
+Every read (`is_valid`, `has_claim`, `check`, `get_record`) extends the TTL of the record
+it finds **and** of the contract instance, like `register` does: a gate that gets asked
+never archives.
 
 ### Types and storage
 
@@ -174,7 +178,7 @@ pub struct GateRecord {
 | Code | Name | When |
 |---:|---|---|
 | 1 | `NotAVault` | The vault was not deployed by ACTA's factory |
-| 2 | `InputTooLong` | Type, claims or values above the limits |
+| 2 | `InputTooLong` | `vc_id`, type, claims or values above the limits |
 | 3 | `NotTheIssuer` | The credential does not exist in the vault, or its `issuer` is someone else |
 | 4 | `CredentialNotValid` | The credential or the vault is revoked |
 
@@ -203,8 +207,15 @@ pub struct Requirement {
 
 If `claims` is empty, any valid credential of that type works. It is stored per
 `(smart_account, context_rule_id)`, as OpenZeppelin requires for policies shared
-across accounts. Two claims with the same key contradict each other: `enforce`
-fails closed with `MalformedRequirement`.
+across accounts. Two claims with the same key contradict each other: `install`
+rejects it with `MalformedRequirement`, so a treasury never installs a rule that can
+only fail; if the entry got there some other way, `enforce` still fails closed with
+the same error.
+
+**TTL.** `install` extends the TTL of the `Requirement` entry and of the contract
+instance to ~180 days, and every read (`enforce` on a payment, `get_requirement`)
+extends them again once fewer than ~30 remain, the way OpenZeppelin's threshold policy
+does: a treasury that pays never finds its policy archived.
 
 ### `enforce`
 
@@ -217,11 +228,19 @@ fn == "transfer":
     recipient = args[1]               (a MuxedAddress resolves to its base account)
     ok = gate.check(recipient, issuer, type, claims)      (a single cross-contract call)
     ok                                                          else RecipientNotCredentialed
+    emit Enforced { smart_account, context_rule_id, recipient }
 fn == "approve":                                                     AllowanceNotPermitted
 transfer or execute with arguments that cannot be read:              MalformedCall
 claims with the same key twice:                                      MalformedRequirement
-anything else: allowed            (the account's administrative calls keep working)
+anything else: allowed            (the account's administrative calls keep working,
+                                   and so do transfer_from and burn_from: see below)
 ```
+
+### Events
+
+`Enforced { smart_account, context_rule_id, recipient }`, only when a payment passes
+the check. A rejected payment panics (no event), and an administrative call emits
+nothing.
 
 ### Treasury configuration
 
@@ -243,6 +262,13 @@ The policy is only as strong as the rule it sits in. Three things in OpenZeppeli
   the spender. A new account, or verify there are none.
 - **`burn` passes.** It pays no one, so it is not an uncredentialed payment, but it
   destroys funds. It stays on the governance side, just like uninstalling the policy.
+- **`transfer_from` and `burn_from` pass, and they are not a shortcut.** In both, the
+  treasury is the *spender*, not the source: `transfer_from(spender = treasury, from = X,
+  to, amount)` moves X's tokens out of an allowance X granted to the treasury, and
+  `burn_from` burns them. The treasury's own funds leave only through `transfer` (which
+  the policy checks) or through an allowance it grants itself (`approve`, which the
+  policy rejects). A `transfer_from` that drains the treasury is signed by the spender,
+  not by the treasury, hence the precondition above: no live allowances when installing.
 - **The policy limits payments, not governance.** Whoever meets the threshold can
   uninstall it.
 
@@ -273,7 +299,7 @@ Two claims with the same key contradict each other: deployment fails with
 | `propose(proposer, title) -> u32` | `proposer` | Opens a proposal. The proposer has to be credentialed |
 | `vote(voter, proposal, in_favor)` | `voter` | One vote per address and proposal. Queries `vc-gate` at that moment |
 | `proposal(id) -> Option<Proposal>` | — | Title, proposer, votes for and against, `created_at` |
-| `has_voted(proposal, voter) -> bool` | — | |
+| `has_voted(proposal, voter) -> bool` | — | Extends the TTL of the vote it reads, like `proposal` does with the proposal |
 | `can_vote(who) -> bool` | — | What the gate answers today about `who`, under this requirement |
 
 Each check is **a single call** to `vc-gate.check(holder, issuer, type,
@@ -329,23 +355,50 @@ Measured with mainnet parameters (August 2026, XLM = $0.172).
 |---|---|---|
 | Vault issuance fee | 1 USDC on mainnet · 5 XLM on testnet (set by the factory) | Per credential |
 | Credential rent in the vault | ~$0.082/year (201 B `vc_data`) · ~$0.137/year (1 KB) | Per credential |
-| Registration in `vc-gate` | *measured at the event* | Per credential used in the gate |
-| Holder's vault | ~$0.057/year in rent (+ the deployment, once) | Per person |
+| Issuance + registration in `vc-gate` | ~3.6 XLM, measured on testnet (both transactions; see [`deployments/acta-gate-testnet.md`](deployments/acta-gate-testnet.md)) | Per credential used in the gate |
+| Holder's vault | ~$0.057/year in rent (+ the deployment, once: ~263 XLM on testnet, because it extends its instance and code to ~180 days) | Per person |
 | Holder's `did:stellar` | ~0.27 XLM/year (≈ $0.046) | Per person |
 
 ---
 
 ## How to run it
 
-> To be completed at the event.
+**Live:** [gate.acta.build](https://gate.acta.build) on testnet, with the backend at
+[backend-gate.acta.build](https://backend-gate.acta.build). Six clicks, each one a real
+transaction: passkey wallet, issue Gold, pay Marta, pay someone without a credential,
+revoke, pay Marta again; the vote below the panels adds one more. What is already verified
+on-chain, with its transactions, is in
+[`deployments/acta-gate-testnet.md`](deployments/acta-gate-testnet.md).
+
+**Locally:**
 
 ```bash
 pnpm install
-pnpm turbo run test --filter=@acta-gate/contracts   # the six contracts
-pnpm dev                                           # web :3000 and api :4000
+cp apps/api/.env.example apps/api/.env      # the treasury's address and the three secret keys
+cp apps/web/.env.example apps/web/.env
+pnpm dev                                    # web :3000 and api :4000
 ```
 
-Contract details and how to test them: [`contracts/README.md`](../contracts/README.md).
+The backend runs against the testnet contracts in `packages/shared` and refuses to start
+without the keys in `apps/api/.env.example`. The API's tests need no network.
+
+**The contracts** (the vault's WASM first: `vc-gate` imports it at compile time, and its
+`build.rs` stops with that exact command when it is missing):
+
+```bash
+cd contracts
+cargo build -p vc-vault-contract --target wasm32v1-none --release
+cargo test                                  # the six contracts
+cargo test -p acta-gate-integration-tests   # the treasury and the vote, end to end
+```
+
+Or from the root, `pnpm turbo run test --filter=@acta-gate/contracts`, which builds the
+WASM first. Contract details and how to test them:
+[`contracts/README.md`](../contracts/README.md).
+
+**Measured on testnet:** creating a vault (`deploy_sponsored`) costs ~263 XLM, because the
+vault extends the TTL of its instance and its code to ~180 days; issuing and registering in
+`vc-gate`, ~3.6 XLM.
 
 **Stack:** `soroban-sdk` 26.1 across the workspace · OpenZeppelin `stellar-accounts`
 0.7.2 · `smart-account-kit`.

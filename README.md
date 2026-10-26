@@ -9,6 +9,82 @@ mainnet.
 - Idea and specification: [`docs/IDEA.md`](docs/IDEA.md)
 - Implementation research: [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md)
 
+## Built during HackMeridian
+
+Everything in this repository was written on 25 October 2026, in
+[these commits](https://github.com/ACTA-Team/acta-gate-meridian/compare/3456e58...main)
+(`3456e58`, the empty monorepo, to `main`). ACTA's three contracts came in as they were on
+mainnet and were changed here.
+
+| Existed before (ACTA, [`contracts-acta@282fe47`](https://github.com/ACTA-Team/contracts-acta/tree/282fe47)) | Built on 25 Oct |
+|---|---|
+| `vc-vault` 0.4.0: the holder's vault, on mainnet | `vc-vault` 0.5.0: records the `issuer`, `revoke_by_issuer`, `is_revoked` ([commit](https://github.com/ACTA-Team/acta-gate-meridian/commit/bd17820)) |
+| `vc-vault-factory`: deploys vaults, `is_vault` | `vc-gate`: the index from an address to its credential and claims ([commit](https://github.com/ACTA-Team/acta-gate-meridian/commit/56f2500), [`check`](https://github.com/ACTA-Team/acta-gate-meridian/commit/5f13881)) |
+| `did-stellar-registry`: `did:stellar` on chain | `credential-policy`: the OpenZeppelin `Policy` with the three traps covered ([commit](https://github.com/ACTA-Team/acta-gate-meridian/commit/32c3367)) |
+| The three were on `soroban-sdk` 23.4; here they build on 26.1 unchanged | `credential-vote`: the second consumer of the gate ([commit](https://github.com/ACTA-Team/acta-gate-meridian/commit/3f286b4)) |
+| | `integration-tests`: treasury and vote through a real OpenZeppelin smart account ([commit](https://github.com/ACTA-Team/acta-gate-meridian/commit/790e16f)) |
+| | `apps/api` and `apps/web`: the backend and the demo console ([api](https://github.com/ACTA-Team/acta-gate-meridian/commit/a4d7a4c), [web](https://github.com/ACTA-Team/acta-gate-meridian/commit/e98338e)) |
+| | Testnet deployments and the verified on-chain run ([doc](docs/deployments/acta-gate-testnet.md)) |
+
+## Gate your contract in 10 lines
+
+This is what `credential-vote` does before letting anyone propose or vote, condensed from
+[`contracts/credential-vote/src/lib.rs`](contracts/credential-vote/src/lib.rs). One
+cross-contract call, whatever the number of claims, and nothing to cache: `vc-gate` re-reads
+the vault every time, so a revocation by the issuer reaches your contract on the next call.
+
+```rust
+#[contractclient(name = "GateClient")]
+trait Gate {
+    fn check(e: Env, holder: Address, issuer: Address, credential_type: String,
+             claims: Map<String, String>) -> bool;
+}
+
+fn require_credentialed(e: &Env, who: &Address) {
+    let req = storage::requirement(e);                    // gate, issuer, type, claims: fixed at deploy
+    let ok = GateClient::new(e, &req.gate)
+        .check(who, &req.issuer, &req.credential_type, &claims_map(e, &req));
+    if !ok { panic_with_error!(e, Error::NotCredentialed) }
+}
+```
+
+A smart account gets the same thing without writing code: install `credential-policy` on its
+rule and every `transfer` goes through that `check`.
+
+## How judges can test it
+
+**Live demo:** [gate.acta.build](https://gate.acta.build), backed by
+[backend-gate.acta.build](https://backend-gate.acta.build) on Stellar testnet. You play all
+three roles. Six clicks, each one a real testnet transaction, each one linked to the explorer
+from the dialog and the activity feed:
+
+1. **Marta: create the wallet.** A passkey (Face ID, Touch ID or Windows Hello). ACTA registers
+   her `did:stellar` and deploys her vault; she signs nothing and needs no XLM.
+2. **GrantFox: issue Gold.** Into her vault, then registered in `vc-gate` with `tier: Gold`.
+3. **Treasury: pay Marta.** The policy asks `vc-gate.check` → paid.
+4. **Treasury: pay someone without a credential.** → `RecipientNotCredentialed`.
+5. **GrantFox: revoke in the vault.** `revoke_by_issuer`; nobody touches the gate.
+6. **Treasury: pay Marta again.** → rejected. The revocation reached a contract GrantFox does
+   not own.
+
+Below the three panels, the vote: Marta proposes and votes with the same credential, signing
+with her passkey, and after step 5 she cannot any more.
+
+**Already verified on chain:** [`docs/deployments/acta-gate-testnet.md`](docs/deployments/acta-gate-testnet.md)
+lists the contracts, the accounts, the measured costs and the step-by-step run, including the
+[payment to a credentialed holder](https://stellar.expert/explorer/testnet/tx/25d68ea2464686ce0b89f6bfa700fd3807c1daaf7c9b210762f5bef9496b456d)
+and the [issuer's revocation](https://stellar.expert/explorer/testnet/tx/b7919b03589f7d4bc06b114810ec139839b9d9fdb766fec1c20def1cd6f94fe0).
+
+**Run the contract tests locally** (the vault's WASM first: `vc-gate` imports it, and its
+`build.rs` stops with that exact command if it is missing, without running cargo itself):
+
+```bash
+cd contracts
+cargo build -p vc-vault-contract --target wasm32v1-none --release
+cargo test                                  # every contract
+cargo test -p acta-gate-integration-tests   # the treasury and the vote, end to end
+```
+
 ## Layout
 
 ```
@@ -88,3 +164,33 @@ such as `NotCredentialed` or `AlreadyVoted` shows up there, before anyone signs)
 answers `{ status: "unsigned", authEntry }`; the web signs it with the passkey
 (`smart-account-kit`, Default rule 0) and sends it back in `auth`. The backend simulates
 again and submits it, paying the fee with ACTA's account.
+
+## Known limitations
+
+- **`execute` is unwrapped one level only.** `credential-policy` opens
+  `execute(target, fn, args)` and checks the inner call. An `execute` whose inner call is
+  another `execute` of the same account is let through as an admin call, and the policy
+  does not recurse. That is not a bypass today because Soroban forbids reentrancy: the
+  account cannot call its own `execute` from inside `execute`, so the nested call never
+  runs. The policy relies on that rule rather than on unwrapping every level.
+- **The passkey deployer secret ships to the browser.** `NEXT_PUBLIC_DEPLOYER_SECRET` pays
+  for the holder's smart account on testnet only. On mainnet that is the relayer's job.
+- **The testnet deployment may predate the TTL hardening in this branch.** `credential-policy`
+  now extends the TTL of its `Requirement` and instance on install and on every read,
+  rejects a duplicate claim key at `install`, and emits `Enforced`; `vc-gate` extends its
+  instance on every read and caps `vc_id`; `credential-vote.has_voted` extends the vote it
+  reads. The contract IDs in [the deployment doc](docs/deployments/acta-gate-testnet.md)
+  were deployed before those changes. Redeploying the policy means redeploying the treasury
+  too (`apps/api/scripts/deploy-smart-account.ts treasury`): the policy is installed on its
+  rule.
+- A credential that is not registered in `vc-gate` does not exist for the gate.
+- If the holder moves a credential to another of their vaults (`push`), the issuer has to
+  call `register` again. The contract already supports it; the backend does not detect it yet.
+- Proposing and voting with a passkey are not verified on chain yet
+  ([placeholder](docs/deployments/acta-gate-testnet.md#proposal-and-vote-verified-on-chain-passkey)).
+
+## Roadmap
+
+Bring the vault changes to ACTA's public contracts and mainnet, credential expiration,
+zero-knowledge selective disclosure (Protocol 25 BN254 and Poseidon host functions, see
+[`circuits/`](circuits)), and credentials for AI agents checked before an x402 payment.

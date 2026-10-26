@@ -1,0 +1,57 @@
+# ACTA Gate
+
+> Let any Soroban contract require a valid verifiable credential, with revocation applied live.
+
+ACTA Gate was built at HackMeridian 2026 (Scale track) on top of ACTA's vault contracts
+(`vc-vault`, `vc-vault-factory`, `did-stellar-registry`), which are already on Stellar mainnet.
+It turns a credential stored in an ACTA vault into something a contract can check: a treasury
+that only pays credentialed contributors, a vote only credentialed members can take part in.
+One credential opens both; one revocation by the issuer closes both. Nobody maintains an
+allowlist.
+
+## The demo
+
+GrantFox, a Stellar contributor platform piloting ACTA credentials, has a USDC treasury that
+only pays holders of a valid "Contributor Gold" credential. Marta is a contributor (demo
+persona). The visitor plays all three roles: Marta creates a passkey wallet (ACTA registers her
+`did:stellar` and deploys her vault, she signs nothing and needs no XLM), GrantFox issues the
+credential into her vault and registers it in `vc-gate`, the treasury pays her, the treasury
+fails to pay an address without a credential, GrantFox revokes the credential in her vault and
+the next payment to Marta is rejected. Below the treasury sits the contributor vote: Marta
+proposes and votes with the same credential, signing with her passkey, and the revocation
+closes that door too. Every click is a real Stellar testnet transaction. The page is in
+English and Spanish.
+
+## Links
+
+- Live demo: https://gate.acta.build
+- Demo API: https://backend-gate.acta.build
+- Source: https://github.com/ACTA-Team/acta-gate-meridian
+- README (what was built, how judges can test it): https://github.com/ACTA-Team/acta-gate-meridian/blob/main/README.md
+- Specification: https://github.com/ACTA-Team/acta-gate-meridian/blob/main/docs/IDEA.md
+- Implementation research, OpenZeppelin's three traps, costs: https://github.com/ACTA-Team/acta-gate-meridian/blob/main/docs/IMPLEMENTATION.md
+- Testnet deployment and the verified on-chain run: https://github.com/ACTA-Team/acta-gate-meridian/blob/main/docs/deployments/acta-gate-testnet.md
+- Contracts workspace: https://github.com/ACTA-Team/acta-gate-meridian/tree/main/contracts
+- ACTA: https://acta.build
+
+## Contracts (Stellar testnet, passphrase `Test SDF Network ; September 2015`)
+
+- `vc-vault-factory` (vault template 0.5.0): CCPEKQVBJP5XK4WLJS3XOVJFH2Q2IQPJK4DAYKUS3NGMCGWMXUJU5TKU
+- `vc-gate`: CDNCAGEI3OCL5G6NL7UVKYR7Q34UPBGPO4SZB3YKOHCPKU5U33LN5UOD
+- `credential-policy`: CBNICQYB5VOIWYPS4WF27OAKCKEALW54SYGFETN63UYF6537KCQZEH66
+- `credential-vote`: CBHPFHOBDDDHP2PFVWGSFOI4THVPQF5I5RZMHCSBZ362FYWJYZ4RWNSE
+- `did-stellar-registry`: CCGVBGVF5V4L7N6QNHBZQLZ6LY7W6ZUFR4JCPWCUKATQWUFBX5TS3OWZ
+- GrantFox treasury (OpenZeppelin smart account): CCJACTUKEMDSICCWLUFF4GWLD3H2KZRWXUTUC7342JZ7FNDGHMYXYHIJ
+
+## Pieces
+
+- `vc-gate`: an index for contracts, from an address to its credential and public claims. Re-reads the vault on every query, so revocation is never cached. No admin, no upgrade path.
+- `credential-policy`: an OpenZeppelin smart-account `Policy`. Installed on a treasury, it only lets it pay credentialed addresses. Rejects an empty signer set, opens `execute` to check the inner `transfer`, rejects `approve`.
+- `credential-vote`: a plain contract where only credentialed addresses propose and vote. The second consumer of `vc-gate`.
+- `vc-vault` (modified ACTA contract, 0.5.0): records who issued each credential and lets the issuer revoke it (`revoke_by_issuer`), plus `is_revoked()`.
+- `apps/api`: sponsors the holder's DID and vault, issues and registers credentials, signs treasury payments, relays the holder's signed votes.
+- `apps/web`: the demo console at https://gate.acta.build.
+
+## Stack
+
+Soroban (`soroban-sdk` 26.1), OpenZeppelin `stellar-accounts` 0.7.2 and `smart-account-kit` (passkeys), Next.js 16, Express 5, pnpm and Turborepo.

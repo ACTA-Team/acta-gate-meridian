@@ -23,6 +23,7 @@ pub use types::{Config, GateRecord};
 use soroban_sdk::{contract, contractimpl, panic_with_error, Address, Env, Map, String};
 
 /// Caps that keep a record small and its reads cheap.
+pub const MAX_VC_ID_LEN: u32 = 64;
 pub const MAX_TYPE_LEN: u32 = 64;
 pub const MAX_CLAIMS: u32 = 8;
 pub const MAX_CLAIM_LEN: u32 = 64;
@@ -56,7 +57,7 @@ impl VcGate {
         if !factory.is_vault(&vault) {
             panic_with_error!(&e, Error::NotAVault);
         }
-        check_caps(&e, &credential_type, &claims);
+        check_caps(&e, &vc_id, &credential_type, &claims);
 
         let v = vault::Client::new(&e, &vault);
         // The vault records the address that authorized the issuance: on-chain
@@ -82,7 +83,10 @@ impl VcGate {
 
     /// Re-checks the vault on every call: `verify_vc` (holder and issuer
     /// revocations) and `is_revoked`. A failing vault call reads as `false`.
+    /// Every read keeps the record and the contract instance alive: a gate
+    /// that is asked never archives.
     pub fn is_valid(e: Env, holder: Address, issuer: Address, credential_type: String) -> bool {
+        storage::extend_instance(&e);
         match storage::read_record(&e, &holder, &issuer, &credential_type) {
             Some(record) => vault_says_valid(&e, &record),
             None => false,
@@ -98,6 +102,7 @@ impl VcGate {
         key: String,
         value: String,
     ) -> bool {
+        storage::extend_instance(&e);
         match storage::read_record(&e, &holder, &issuer, &credential_type) {
             Some(record) => record.claims.get(key) == Some(value) && vault_says_valid(&e, &record),
             None => false,
@@ -114,6 +119,7 @@ impl VcGate {
         credential_type: String,
         claims: Map<String, String>,
     ) -> bool {
+        storage::extend_instance(&e);
         match storage::read_record(&e, &holder, &issuer, &credential_type) {
             // Compare the claims first: a mismatch costs no vault call.
             Some(record) => {
@@ -130,6 +136,7 @@ impl VcGate {
         issuer: Address,
         credential_type: String,
     ) -> Option<GateRecord> {
+        storage::extend_instance(&e);
         storage::read_record(&e, &holder, &issuer, &credential_type)
     }
 }
@@ -144,8 +151,9 @@ fn vault_says_valid(e: &Env, record: &GateRecord) -> bool {
     valid && vault_ok
 }
 
-fn check_caps(e: &Env, credential_type: &String, claims: &Map<String, String>) {
-    let too_long = credential_type.len() > MAX_TYPE_LEN
+fn check_caps(e: &Env, vc_id: &String, credential_type: &String, claims: &Map<String, String>) {
+    let too_long = vc_id.len() > MAX_VC_ID_LEN
+        || credential_type.len() > MAX_TYPE_LEN
         || claims.len() > MAX_CLAIMS
         || claims
             .iter()
