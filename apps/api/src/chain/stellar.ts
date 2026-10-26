@@ -55,6 +55,9 @@ const POLICY_ERRORS: Record<number, string> = {
   1: "NoSigners",
   2: "RecipientNotCredentialed",
   3: "AllowanceNotPermitted",
+  4: "NotInstalled",
+  5: "MalformedCall",
+  6: "MalformedRequirement",
   99: "NotImplemented",
 };
 const VOTE_ERRORS: Record<number, string> = {
